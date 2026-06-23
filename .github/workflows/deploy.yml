@@ -1,0 +1,23 @@
+name: Deploy to Coolify
+
+# Auto-deploy on every push to main. GitHub webhooks can't send Coolify's
+# Bearer auth header, so we call the Coolify deploy API directly from Actions.
+# Requires repo secrets: COOLIFY_TOKEN, COOLIFY_APP_UUID.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Coolify deploy
+        run: |
+          echo "Triggering deploy for ${{ secrets.COOLIFY_APP_UUID }}"
+          resp=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            "https://dash.build3.online/api/v1/deploy?uuid=${{ secrets.COOLIFY_APP_UUID }}&force=true")
+          echo "$resp"
+          echo "$resp" | grep -q "deployment_uuid" || { echo "Deploy was not queued"; exit 1; }
