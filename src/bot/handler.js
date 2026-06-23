@@ -8,6 +8,7 @@ const { sendOutbox } = require('./sendOutbox');
 const { pushProfile } = require('./tools');
 const fmt = require('./format');
 const wa = require('../whatsapp/cloudApi');
+const { INTRO } = require('../lib/constants');
 const log = require('../lib/logger');
 
 const MATCH_PAGE = 3;
@@ -45,6 +46,11 @@ async function handleEvent(ev) {
 
   // 2) Conversational turn.
   try {
+    // One-time beta disclaimer on a user's first interaction.
+    if (!(conv.draft && conv.draft.intro_sent)) {
+      await wa.sendText(to, INTRO);
+    }
+
     const { outbox, finalText, state } = await engine.run({
       text: ev.text || '',
       requesterSlug,
@@ -67,6 +73,7 @@ async function handleEvent(ev) {
 
 function persistDraft(conv, state) {
   const draft = { ...(conv.draft || {}) };
+  draft.intro_sent = true; // disclaimer shown once per conversation
   if (state.match_cache) {
     draft.match_cache = state.match_cache;
     draft.match_offset = MATCH_PAGE;

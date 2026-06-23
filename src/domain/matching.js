@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { openai } = require('../config/openai');
 const { env } = require('../config/env');
 const { supabase } = require('../config/supabase');
-const { cofounderCandidates, getBySlug } = require('./founders');
+const { cofounderCandidates, candidatesByFilters, getBySlug } = require('./founders');
 const { buildSystemPrompt, buildUserPrompt } = require('./matchingPrompt');
 const log = require('../lib/logger');
 
@@ -83,10 +83,19 @@ async function findCofounders(filters = {}, requesterSlug = null) {
   }
 
   const requester = requesterSlug ? await getBySlug(requesterSlug) : null;
-  const candidates = await cofounderCandidates(filters, requesterSlug, 40);
+
+  // Prefer founders who explicitly seek a cofounder; if none match the filters,
+  // fall back to all founders matching the filters (soft match) so we surface
+  // people worth a conversation rather than returning nothing.
+  let candidates = await cofounderCandidates(filters, requesterSlug, 40);
+  let soft = false;
+  if (candidates.length === 0) {
+    candidates = await candidatesByFilters(filters, requesterSlug, 40);
+    soft = true;
+  }
 
   if (candidates.length === 0) {
-    return { results: [], poolSize: 0, cached: false, tooFew: true };
+    return { results: [], poolSize: 0, cached: false, tooFew: true, soft: false };
   }
 
   const target = buildTarget(requester, filters);
@@ -130,7 +139,7 @@ async function findCofounders(filters = {}, requesterSlug = null) {
 
   await writeCache(requesterSlug, sig, results);
 
-  return { results, poolSize: candidates.length, cached: false, tooFew: results.length < 3 };
+  return { results, poolSize: candidates.length, cached: false, tooFew: results.length < 3, soft };
 }
 
 module.exports = { findCofounders };

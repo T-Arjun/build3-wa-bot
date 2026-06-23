@@ -141,6 +141,28 @@ async function cofounderCandidates(filters = {}, excludeSlug = null, limit = 40)
   return data || [];
 }
 
+/**
+ * Fallback pool when nobody matching the filters has explicitly set cofounder
+ * intent: all published founders matching the filters, EXCLUDING those who
+ * explicitly opted out (looking_for contains 'none'). Founders who left
+ * looking_for blank are included — blank means "unspecified", not "no".
+ */
+async function candidatesByFilters(filters = {}, excludeSlug = null, limit = 40) {
+  let q = supabase()
+    .from('founders')
+    .select(
+      'source_slug,name,city,cohort,sector,skills,traits,dharma,looking_for,' +
+        'startup_name,startup_idea,startup_stage,avatar_url,linkedin_url',
+    )
+    .eq('is_published', true)
+    .not('looking_for', 'cs', pgArray(['none']));
+  q = applyFilters(q, filters);
+  if (excludeSlug) q = q.neq('source_slug', excludeSlug);
+  const { data, error } = await q.limit(limit);
+  if (error) throw new Error(`candidatesByFilters: ${error.message}`);
+  return data || [];
+}
+
 module.exports = {
   findByWaId,
   searchFounders,
@@ -148,4 +170,5 @@ module.exports = {
   getBySlug,
   findByName,
   cofounderCandidates,
+  candidatesByFilters,
 };

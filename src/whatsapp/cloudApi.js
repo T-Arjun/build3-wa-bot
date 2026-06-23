@@ -1,6 +1,7 @@
 'use strict';
 
 const { env } = require('../config/env');
+const { DISCLAIMER } = require('../lib/constants');
 const log = require('../lib/logger');
 
 /**
@@ -48,6 +49,7 @@ function sendButtons(to, body, buttons) {
     interactive: {
       type: 'button',
       body: { text: truncate(body, 1024) },
+      footer: { text: truncate(DISCLAIMER, 60) },
       action: {
         buttons: buttons.slice(0, 3).map((b) => ({
           type: 'reply',
@@ -69,6 +71,7 @@ function sendList(to, body, buttonLabel, rows, header) {
       type: 'list',
       ...(header ? { header: { type: 'text', text: truncate(header, 60) } } : {}),
       body: { text: truncate(body, 1024) },
+      footer: { text: truncate(DISCLAIMER, 60) },
       action: {
         button: truncate(buttonLabel || 'Select', 20),
         sections: [

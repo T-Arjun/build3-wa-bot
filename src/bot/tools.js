@@ -135,9 +135,18 @@ const impls = {
     if (!haveCriteria && !ctx.requesterSlug) {
       return { status: 'need_criteria' };
     }
-    const { results, poolSize, tooFew } = await findCofounders(filters, ctx.requesterSlug);
+    const { results, poolSize, tooFew, soft } = await findCofounders(filters, ctx.requesterSlug);
     if (poolSize === 0 || results.length === 0) {
       return { status: 'too_few', poolSize };
+    }
+    if (soft) {
+      ctx.outbox.push({
+        kind: 'text',
+        body:
+          "I didn't find anyone there who's said they're actively looking for a cofounder. " +
+          'But we do have a few founder connects from that search — they\'re not explicitly seeking, ' +
+          'though if you like, we can help you start a conversation with them:',
+      });
     }
     const top = results.slice(0, 3);
     for (const m of top) {
@@ -154,6 +163,7 @@ const impls = {
     }
     return {
       status: 'ok',
+      soft,
       shown: top.length,
       total: results.length,
       top: top.map((m) => `${m.name} (${m.score})`),
