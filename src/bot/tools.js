@@ -131,10 +131,9 @@ const impls = {
 
   async find_cofounders(args, ctx) {
     const filters = toFilters(args);
-    const haveCriteria = !!(filters.sector || filters.city || (filters.skills && filters.skills.length) || filters.stage);
-    if (!haveCriteria && !ctx.requesterSlug) {
-      return { status: 'need_criteria' };
-    }
+    // No hard "need criteria" gate — a broad search returns sensible results
+    // (cofounder-seekers, or soft fallback). The engine clarifies at most once
+    // at the conversation layer; once the user wants results, we always show some.
     const { results, poolSize, tooFew, soft } = await findCofounders(filters, ctx.requesterSlug);
     if (poolSize === 0 || results.length === 0) {
       return { status: 'too_few', poolSize };

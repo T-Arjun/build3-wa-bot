@@ -25,9 +25,11 @@ async function run(input) {
     ? `The user is a known founder${ctx.requesterName ? ` named ${ctx.requesterName}` : ''} (slug: ${ctx.requesterSlug}).`
     : `The user is not yet linked to a founder profile${ctx.requesterName ? ` (WhatsApp name: ${ctx.requesterName})` : ''}.`;
 
+  const history = Array.isArray(input.history) ? input.history : [];
   const messages = [
     { role: 'system', content: systemPrompt() },
     { role: 'system', content: identity },
+    ...history,
     { role: 'user', content: input.text || '' },
   ];
 
@@ -75,7 +77,23 @@ async function run(input) {
     break;
   }
 
-  return { outbox: ctx.outbox, finalText, state: ctx.state };
+  return { outbox: ctx.outbox, finalText, state: ctx.state, assistantSummary: summarize(finalText, ctx.outbox) };
+}
+
+/**
+ * One-line memory of what the assistant did this turn, so the next turn's
+ * history conveys what was shown (lists/cards don't go through finalText).
+ */
+function summarize(finalText, outbox) {
+  const parts = [];
+  for (const m of outbox) {
+    if (m.kind === 'list') parts.push(`[showed list: ${(m.rows || []).map((r) => r.title).slice(0, 6).join(', ')}]`);
+    else if (m.kind === 'image') parts.push(`[showed: ${String(m.caption || '').split('\n')[0]}]`);
+    else if (m.kind === 'buttons') parts.push(`[buttons: ${m.body}]`);
+    else if (m.kind === 'text') parts.push(m.body);
+  }
+  if (finalText) parts.push(finalText);
+  return parts.join(' ').slice(0, 600) || '(no reply)';
 }
 
 module.exports = { run };

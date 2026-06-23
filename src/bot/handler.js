@@ -51,18 +51,27 @@ async function handleEvent(ev) {
       await wa.sendText(to, INTRO);
     }
 
-    const { outbox, finalText, state } = await engine.run({
+    const history = Array.isArray(conv.history) ? conv.history : [];
+    const { outbox, finalText, state, assistantSummary } = await engine.run({
       text: ev.text || '',
       requesterSlug,
       requesterName,
+      history,
     });
 
     await sendOutbox(to, outbox);
     if (finalText) await wa.sendText(to, finalText);
 
+    const newHistory = [
+      ...history,
+      { role: 'user', content: ev.text || '' },
+      { role: 'assistant', content: assistantSummary || '(no reply)' },
+    ].slice(-10);
+
     await saveConversation(to, {
       ...baseState,
       last_results: state.last_results || conv.last_results || [],
+      history: newHistory,
       draft: persistDraft(conv, state),
     });
   } catch (err) {
@@ -88,14 +97,16 @@ async function routeReply(ev, to, conv, baseState) {
   if (id.startsWith('profile:')) {
     const slug = id.slice('profile:'.length);
     const f = await founders.getBySlug(slug);
+    const hist = Array.isArray(conv.history) ? conv.history : [];
     if (f) {
       const ctx = { outbox: [] };
       pushProfile(ctx, f);
       await sendOutbox(to, ctx.outbox);
+      hist.push({ role: 'assistant', content: `[showed profile: ${f.name}]` });
     } else {
       await wa.sendText(to, "I couldn't find that profile anymore.");
     }
-    await saveConversation(to, baseState);
+    await saveConversation(to, { ...baseState, history: hist.slice(-10) });
     return true;
   }
 

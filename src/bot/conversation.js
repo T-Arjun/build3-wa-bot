@@ -14,6 +14,7 @@ const DEFAULT = {
   step: null,
   draft: {},
   last_results: [],
+  history: [],
   last_message_at: null,
 };
 
