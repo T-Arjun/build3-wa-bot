@@ -20,7 +20,12 @@ app.use(
   }),
 );
 
-app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
+// Coolify injects SOURCE_COMMIT at build; expose it so we can verify what's live.
+const BUILD_COMMIT =
+  process.env.SOURCE_COMMIT || process.env.GIT_COMMIT || process.env.COMMIT_SHA || 'unknown';
+app.get('/health', (_req, res) =>
+  res.json({ ok: true, commit: BUILD_COMMIT, ts: new Date().toISOString() }),
+);
 
 // ─── Webhook verification (Meta handshake) ──────────────────────────────────
 app.get('/webhook', (req, res) => {
