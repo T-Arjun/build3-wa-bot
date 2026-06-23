@@ -26,7 +26,19 @@ function avatarFor(f) {
 }
 
 function subtitle(f) {
-  return [f.startup_name, f.sector, f.city].filter(Boolean).join(' · ');
+  // Describe by what they're building, not their sector tag.
+  // Priority: startup idea snippet > startup name > skills > city alone.
+  const location = f.city || null;
+  if (f.startup_idea) {
+    const idea = truncate(f.startup_idea.trim(), 60);
+    return location ? `${idea} · ${location}` : idea;
+  }
+  if (f.startup_name) {
+    return location ? `${f.startup_name} · ${location}` : f.startup_name;
+  }
+  const topSkills = (f.skills || []).slice(0, 2).join(', ');
+  if (topSkills) return location ? `${topSkills} · ${location}` : topSkills;
+  return location || '';
 }
 
 function hasCohort(f) {
@@ -89,8 +101,15 @@ function focusFields(f) {
 /** A single cofounder match block (used when sent as an image card caption). */
 function matchCaption(m) {
   const lines = [`*${m.name}* — ${m.score}/100`];
-  const sub = [m.startup_name, m.sector, m.city].filter(Boolean).join(' · ');
-  if (sub) lines.push(sub);
+  // Lead with what they're building, then location. Sector tag is not a description.
+  if (m.startup_idea) {
+    const idea = truncate(m.startup_idea.trim(), 80);
+    lines.push(m.city ? `${idea} · ${m.city}` : idea);
+  } else if (m.startup_name) {
+    lines.push(m.city ? `${m.startup_name} · ${m.city}` : m.startup_name);
+  } else if (m.city) {
+    lines.push(m.city);
+  }
   for (const r of m.reasons || []) lines.push(`• ${r}`);
   return lines.join('\n');
 }
