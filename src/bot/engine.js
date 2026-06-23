@@ -29,9 +29,16 @@ async function run(input) {
   const messages = [
     { role: 'system', content: systemPrompt() },
     { role: 'system', content: identity },
-    ...history,
-    { role: 'user', content: input.text || '' },
   ];
+  if (input.focus) {
+    messages.push({
+      role: 'system',
+      content:
+        'FOCUS — the founder the user is currently viewing. Answer any question about them using ONLY these facts; never invent a sector, skill, stage, or startup detail. If a field is null/empty, say you don\'t have that detail.\n' +
+        JSON.stringify(input.focus),
+    });
+  }
+  messages.push(...history, { role: 'user', content: input.text || '' });
 
   let finalText = '';
 

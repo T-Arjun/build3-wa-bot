@@ -111,13 +111,15 @@ const impls = {
       const f = await founders.getBySlug(args.slug);
       if (!f) return { status: 'none' };
       pushProfile(ctx, f);
-      return { status: 'shown', name: f.name, note: shownNote };
+      ctx.state.focus = fmt.focusFields(f);
+      return { status: 'shown', name: f.name, facts: ctx.state.focus, note: shownNote };
     }
     const matches = await founders.findByName(args.name || '', 5);
     if (matches.length === 0) return { status: 'none', query: args.name };
     if (matches.length === 1) {
       pushProfile(ctx, matches[0]);
-      return { status: 'shown', name: matches[0].name, note: shownNote };
+      ctx.state.focus = fmt.focusFields(matches[0]);
+      return { status: 'shown', name: matches[0].name, facts: ctx.state.focus, note: shownNote };
     }
     ctx.outbox.push({
       kind: 'list',

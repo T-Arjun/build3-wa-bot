@@ -57,6 +57,7 @@ async function handleEvent(ev) {
       requesterSlug,
       requesterName,
       history,
+      focus: conv.draft?.focus || null,
     });
 
     await sendOutbox(to, outbox);
@@ -87,6 +88,7 @@ function persistDraft(conv, state) {
     draft.match_cache = state.match_cache;
     draft.match_offset = MATCH_PAGE;
   }
+  if (state.focus) draft.focus = state.focus; // ground follow-up Q&A on real data
   return draft;
 }
 
@@ -98,15 +100,17 @@ async function routeReply(ev, to, conv, baseState) {
     const slug = id.slice('profile:'.length);
     const f = await founders.getBySlug(slug);
     const hist = Array.isArray(conv.history) ? conv.history : [];
+    const draft = { ...(conv.draft || {}) };
     if (f) {
       const ctx = { outbox: [] };
       pushProfile(ctx, f);
       await sendOutbox(to, ctx.outbox);
       hist.push({ role: 'assistant', content: `[showed profile: ${f.name}]` });
+      draft.focus = fmt.focusFields(f); // so follow-ups answer from real data
     } else {
       await wa.sendText(to, "I couldn't find that profile anymore.");
     }
-    await saveConversation(to, { ...baseState, history: hist.slice(-10) });
+    await saveConversation(to, { ...baseState, history: hist.slice(-10), draft });
     return true;
   }
 
