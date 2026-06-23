@@ -27,6 +27,45 @@ function pgArray(values) {
   return `{${values.map((v) => `"${String(v).replace(/(["\\])/g, '\\$1')}"`).join(',')}}`;
 }
 
+// ─── Dedup (source has duplicate person records) ───────────────────────────────
+
+function linkedinHandle(url) {
+  if (!url) return null;
+  const m = String(url).toLowerCase().match(/linkedin\.com\/(?:in|company)\/([a-z0-9\-_%.]+)/i);
+  return m ? m[1].replace(/\/+$/, '') : null;
+}
+
+/** Identity key: LinkedIn handle if present, else name+city. */
+function identityKey(f) {
+  return (
+    linkedinHandle(f.linkedin_url) ||
+    `${(f.name || '').toLowerCase().trim()}|${(f.city || '').toLowerCase().trim()}`
+  );
+}
+
+/** Collapse rows that are the same person, keeping the most complete record. */
+function dedupeFounders(rows) {
+  const completeness = (f) =>
+    [
+      f.startup_name,
+      f.startup_idea,
+      f.sector,
+      f.dharma,
+      f.startup_stage,
+      f.skills && f.skills.length,
+      f.looking_for && f.looking_for.length,
+      f.avatar_url && !f.avatar_url.includes('ui-avatars.com'),
+    ].filter(Boolean).length;
+
+  const byKey = new Map();
+  for (const f of rows) {
+    const k = identityKey(f);
+    const cur = byKey.get(k);
+    if (!cur || completeness(f) > completeness(cur)) byKey.set(k, f);
+  }
+  return Array.from(byKey.values());
+}
+
 async function findByWaId(waId) {
   const { data } = await supabase()
     .from('founders')
@@ -79,9 +118,10 @@ async function searchFounders(filters = {}, limit = 10) {
     .select(LIST_COLUMNS)
     .eq('is_published', true);
   q = applyFilters(q, filters);
-  const { data, error } = await q.limit(limit);
+  // Over-fetch then dedupe so duplicate person records don't fill the slots.
+  const { data, error } = await q.limit(limit * 2);
   if (error) throw new Error(`searchFounders: ${error.message}`);
-  return data || [];
+  return dedupeFounders(data || []).slice(0, limit);
 }
 
 async function countFounders(filters = {}) {
@@ -115,9 +155,10 @@ async function findByName(name, limit = 5) {
     .select(LIST_COLUMNS)
     .eq('is_published', true)
     .ilike('name', `%${clean}%`)
-    .limit(limit);
+    .limit(Math.max(limit * 3, 15));
   if (error) throw new Error(`findByName: ${error.message}`);
-  return data || [];
+  // Dedupe so the same person (duplicate records) isn't offered as two choices.
+  return dedupeFounders(data || []).slice(0, limit);
 }
 
 /**
@@ -138,7 +179,7 @@ async function cofounderCandidates(filters = {}, excludeSlug = null, limit = 40)
   if (excludeSlug) q = q.neq('source_slug', excludeSlug);
   const { data, error } = await q.limit(limit);
   if (error) throw new Error(`cofounderCandidates: ${error.message}`);
-  return data || [];
+  return dedupeFounders(data || []);
 }
 
 /**
@@ -160,7 +201,7 @@ async function candidatesByFilters(filters = {}, excludeSlug = null, limit = 40)
   if (excludeSlug) q = q.neq('source_slug', excludeSlug);
   const { data, error } = await q.limit(limit);
   if (error) throw new Error(`candidatesByFilters: ${error.message}`);
-  return data || [];
+  return dedupeFounders(data || []);
 }
 
 module.exports = {
