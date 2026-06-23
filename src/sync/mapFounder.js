@@ -1,0 +1,82 @@
+'use strict';
+
+/**
+ * Map a source getListedUsers record → our `founders` row shape.
+ * Field names on the left mirror the source PUBLIC_FIELDS (routes/api.js).
+ * Note: getListedUsers does NOT return email or linkedinData; those stay empty.
+ */
+
+function arr(v) {
+  if (Array.isArray(v)) return v.filter((x) => x != null && x !== '');
+  if (v == null || v === '') return [];
+  return [v];
+}
+
+function toTimestamp(v) {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function buildSearchBlob(src) {
+  return [
+    src.name,
+    src.startupName,
+    src.startupIdea,
+    src.sector,
+    src.city,
+    src.program,
+    src.dharma,
+    ...arr(src.skills),
+    ...arr(src.traits),
+    ...arr(src.lookingFor),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function mapFounder(src) {
+  return {
+    source_slug: src.slug,
+    origin: 'synced',
+    search_blob: buildSearchBlob(src),
+
+    name: src.name || '(unnamed)',
+    phone: src.phonePublic ? src.phone || null : null,
+    phone_public: !!src.phonePublic,
+
+    cohort: Number.isInteger(src.cohort) ? src.cohort : null,
+    city: src.city || null,
+    program: src.program || null,
+
+    dharma: src.dharma || null,
+    traits: arr(src.traits),
+    skills: arr(src.skills),
+    sector: src.sector || null,
+    looking_for: arr(src.lookingFor),
+
+    startup_name: src.startupName || null,
+    startup_idea: src.startupIdea || null,
+    startup_stage: src.startupStage || null,
+    quote: src.quote || null,
+
+    primary_role: src.primaryRole || null,
+    platform_role: arr(src.platformRole),
+
+    investment_thesis: src.investmentThesis || null,
+    ticket_size: src.ticketSize || null,
+    portfolio: arr(src.portfolioCompanies),
+
+    avatar_url: src.avatarUrl || null,
+    banner_url: src.bannerUrl || null,
+    linkedin_url: src.linkedinUrl || null,
+
+    is_published: src.isPublished !== false,
+    source_created_at: toTimestamp(src.createdAt),
+    source_updated_at: toTimestamp(src.updatedAt),
+    synced_at: new Date().toISOString(),
+  };
+}
+
+module.exports = { mapFounder };
