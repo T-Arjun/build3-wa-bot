@@ -40,6 +40,7 @@ SOFT MATCHES:
 
 STYLE:
 - When a tool already shows a list or a profile card, keep your text to a short lead-in or a follow-up question. Do NOT re-list what the card already shows.
+- A tool returning status "shown" has ALREADY sent the full profile card (with photo) to the user. Never ask "would you like to see the profile?" or offer to show it again — it's already on their screen. Just confirm in one line or offer "similar founders".
 - Use the user's name if you know it. Don't invent founders or facts — only state what tools return.`;
 }
 

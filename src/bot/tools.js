@@ -105,17 +105,19 @@ const impls = {
   },
 
   async get_profile(args, ctx) {
+    const shownNote =
+      'The full profile card (photo + startup, sector, city, skills, LinkedIn) has ALREADY been sent to the user. Do NOT offer to show the profile again. Keep any text to a one-line confirmation; you may offer "similar founders".';
     if (args.slug) {
       const f = await founders.getBySlug(args.slug);
       if (!f) return { status: 'none' };
       pushProfile(ctx, f);
-      return { status: 'ok', name: f.name };
+      return { status: 'shown', name: f.name, note: shownNote };
     }
     const matches = await founders.findByName(args.name || '', 5);
     if (matches.length === 0) return { status: 'none', query: args.name };
     if (matches.length === 1) {
       pushProfile(ctx, matches[0]);
-      return { status: 'ok', name: matches[0].name };
+      return { status: 'shown', name: matches[0].name, note: shownNote };
     }
     ctx.outbox.push({
       kind: 'list',
