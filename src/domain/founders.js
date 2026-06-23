@@ -17,6 +17,16 @@ function normPhone(p) {
   return String(p || '').replace(/[^0-9]/g, '');
 }
 
+/**
+ * Build a PostgREST array literal: {"a, b","c"}.
+ * Needed because supabase-js .overlaps()/.contains() do NOT quote array
+ * elements, so values containing commas (e.g. "co-founder, I have a startup")
+ * would otherwise be split into wrong tokens.
+ */
+function pgArray(values) {
+  return `{${values.map((v) => `"${String(v).replace(/(["\\])/g, '\\$1')}"`).join(',')}}`;
+}
+
 async function findByWaId(waId) {
   const { data } = await supabase()
     .from('founders')
@@ -50,7 +60,7 @@ function applyFilters(q, filters = {}) {
   if (filters.stage) q = q.eq('startup_stage', filters.stage);
   if (filters.role) q = q.contains('platform_role', [filters.role]);
   if (Array.isArray(filters.lookingFor) && filters.lookingFor.length) {
-    q = q.overlaps('looking_for', filters.lookingFor);
+    q = q.overlaps('looking_for', pgArray(filters.lookingFor));
   }
   // Skills + free text are fuzzy → matched via search_blob ilike (any term).
   const terms = [];
@@ -123,7 +133,7 @@ async function cofounderCandidates(filters = {}, excludeSlug = null, limit = 40)
         'startup_name,startup_idea,startup_stage,avatar_url,linkedin_url',
     )
     .eq('is_published', true)
-    .overlaps('looking_for', COFOUNDER_INTENT);
+    .overlaps('looking_for', pgArray(COFOUNDER_INTENT));
   q = applyFilters(q, filters);
   if (excludeSlug) q = q.neq('source_slug', excludeSlug);
   const { data, error } = await q.limit(limit);
