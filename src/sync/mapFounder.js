@@ -18,6 +18,8 @@ function toTimestamp(v) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+const { blobLocationTokens } = require('../domain/geo');
+
 function buildSearchBlob(src) {
   return [
     src.name,
@@ -30,6 +32,9 @@ function buildSearchBlob(src) {
     ...arr(src.skills),
     ...arr(src.traits),
     ...arr(src.lookingFor),
+    // Fold in state + city aliases so free-text "kerala"/"cochin" matches a
+    // founder whose city only says "Kochi".
+    ...blobLocationTokens(src.city),
   ]
     .filter(Boolean)
     .join(' ')

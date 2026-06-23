@@ -2,6 +2,7 @@
 
 const { supabase } = require('../config/supabase');
 const { COFOUNDER_INTENT } = require('./enums');
+const { expandLocation } = require('./geo');
 
 /**
  * Founder queries over Supabase. All reads are scoped to published profiles.
@@ -93,7 +94,20 @@ async function findByWaId(waId) {
  */
 function applyFilters(q, filters = {}) {
   if (filters.sector) q = q.eq('sector', filters.sector);
-  if (filters.city) q = q.ilike('city', `%${filters.city}%`);
+  if (filters.city) {
+    // Expand a city OR a state/region into all the substring terms that should
+    // match. "Kerala" → kerala, kochi, cochin, thiruvananthapuram, … so a Kochi
+    // founder is found even though `city` never says "Kerala". Falls back to the
+    // raw term for places we haven't mapped.
+    const { terms } = expandLocation(filters.city);
+    const list = (terms.length ? terms : [String(filters.city).toLowerCase()])
+      .filter((t) => t && !/[,()]/.test(t)); // commas/parens would break the or() filter
+    if (list.length === 1) {
+      q = q.ilike('city', `%${list[0]}%`);
+    } else if (list.length > 1) {
+      q = q.or(list.map((t) => `city.ilike.*${t}*`).join(','));
+    }
+  }
   if (Number.isInteger(filters.cohort)) q = q.eq('cohort', filters.cohort);
   if (filters.program) q = q.eq('program', filters.program);
   if (filters.stage) q = q.eq('startup_stage', filters.stage);

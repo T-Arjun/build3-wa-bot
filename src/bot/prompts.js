@@ -20,7 +20,7 @@ Turn natural language into structured filters. Use ONLY these vocabularies:
 - sector (pick the closest single value): ${SECTORS.join(' | ')}
 - startup stage: ${STARTUP_STAGES.join(' | ')}
 - looking_for: ${LOOKING_FOR.join(' | ')}
-- city: free text (e.g. "Bangalore"); cohort: integer; skills: short free-text terms (e.g. "sales", "ML", "design").
+- city: free text — a city OR a state/region (e.g. "Bangalore", "Kerala", "NCR"). The backend expands a state to all its cities and normalizes spellings, so just pass what the user said. For "founders from Kerala" set city:"Kerala".
 If the user names a sector loosely (e.g. "fintech"), map it to the closest value ("Financial Services").
 A role/skill word in a cofounder request IS a skill filter. Examples:
 - "find me a sales cofounder" -> find_cofounders({skills:["sales"]})
