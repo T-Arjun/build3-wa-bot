@@ -1,5 +1,6 @@
 'use strict';
 
+const { env } = require('../config/env');
 const engine = require('./engine');
 const founders = require('../domain/founders');
 const { getConversation, saveConversation } = require('./conversation');
@@ -17,6 +18,17 @@ const MATCH_PAGE = 3;
  */
 async function handleEvent(ev) {
   const to = ev.waId;
+
+  // Graceful degrade: until the database/source are wired, confirm we're online
+  // so the WhatsApp inbound→outbound loop is testable on its own.
+  if (!env.supabase.url || !env.supabase.serviceKey) {
+    await wa.sendText(
+      to,
+      "👋 Hi! build3 bot is online — I'm in final setup right now. Founder search and cofounder matching go live very soon. Message me again shortly!",
+    );
+    return;
+  }
+
   const conv = await getConversation(to);
   const founder = await founders.findByWaId(to);
   const requesterSlug = founder?.source_slug || conv.founder_slug || null;
