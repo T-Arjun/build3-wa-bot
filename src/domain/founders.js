@@ -33,16 +33,42 @@ function pgArray(values) {
 
 function linkedinHandle(url) {
   if (!url) return null;
-  const m = String(url).toLowerCase().match(/linkedin\.com\/(?:in|company)\/([a-z0-9\-_%.]+)/i);
+  // ONLY personal profiles (/in/...) identify a person. Company pages
+  // (/company/...) are shared by everyone at the startup, so they must NOT be an
+  // identity key — otherwise two cofounders who both link their company page
+  // collapse into one and one of them disappears from the directory.
+  const m = String(url).toLowerCase().match(/linkedin\.com\/in\/([a-z0-9\-_%.]+)/i);
   return m ? m[1].replace(/\/+$/, '') : null;
 }
 
-/** Identity key: LinkedIn handle if present, else name+city. */
+/** Normalize a name for comparison: lowercase, strip titles/punctuation. */
+function normalizeName(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/\b(dr|mr|mrs|ms|prof|mx)\b\.?/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Are two names plausibly the same person? Same normalized string, or they share
+ * a name token of length >= 3 (handles "Avinash matkar"/"Avinash Matkar",
+ * "Zeeshan MD"/"Zeeshan Mohammed"). Missing names → allow (can't tell).
+ */
+function namesSimilar(a, b) {
+  const na = normalizeName(a);
+  const nb = normalizeName(b);
+  if (!na || !nb) return true;
+  if (na === nb) return true;
+  const ta = new Set(na.split(' ').filter((t) => t.length >= 3));
+  return nb.split(' ').some((t) => t.length >= 3 && ta.has(t));
+}
+
+/** Identity key: personal-LinkedIn handle if present, else name+city. */
 function identityKey(f) {
-  return (
-    linkedinHandle(f.linkedin_url) ||
-    `${(f.name || '').toLowerCase().trim()}|${(f.city || '').toLowerCase().trim()}`
-  );
+  const h = linkedinHandle(f.linkedin_url);
+  return h ? `in:${h}` : `nc:${(f.name || '').toLowerCase().trim()}|${(f.city || '').toLowerCase().trim()}`;
 }
 
 /** Collapse rows that are the same person, keeping the most complete record. */
@@ -61,7 +87,13 @@ function dedupeFounders(rows) {
 
   const byKey = new Map();
   for (const f of rows) {
-    const k = identityKey(f);
+    let k = identityKey(f);
+    // Guard against distinct people who share one /in/ URL (a source data error):
+    // if a row already sits under this handle with a clearly different name, treat
+    // this as a separate person instead of silently merging them away.
+    if (k.startsWith('in:') && byKey.has(k) && !namesSimilar(byKey.get(k).name, f.name)) {
+      k = `${k}#${normalizeName(f.name)}`;
+    }
     const cur = byKey.get(k);
     if (!cur || completeness(f) > completeness(cur)) byKey.set(k, f);
   }
@@ -157,7 +189,9 @@ async function countFounders(filters = {}) {
   q = applyFilters(q, filters);
   const { data, error } = await q;
   if (error) throw new Error(`countFounders: ${error.message}`);
-  return new Set((data || []).map(identityKey)).size;
+  // Same dedupe (incl. the name-similarity guard) as searchFounders, so the
+  // count always equals what the user actually sees.
+  return dedupeFounders(data || []).length;
 }
 
 async function getBySlug(slug) {
@@ -237,4 +271,6 @@ module.exports = {
   findByName,
   cofounderCandidates,
   candidatesByFilters,
+  dedupeFounders,
+  namesSimilar,
 };

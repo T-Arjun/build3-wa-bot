@@ -10,6 +10,7 @@ const { COFOUNDER_INTENT } = require('../src/domain/enums');
 const { buildTarget } = require('../src/domain/matching');
 const { withRetry } = require('../src/lib/retry');
 const { hasAnyFilter, toFilters } = require('../src/bot/tools');
+const { dedupeFounders } = require('../src/domain/founders');
 
 test('parseInbound extracts a text message', () => {
   const body = {
@@ -150,6 +151,38 @@ test('withRetry retries transient errors then succeeds', async () => {
   );
   assert.equal(out, 'ok');
   assert.equal(calls, 2);
+});
+
+test('dedupe does NOT merge two people sharing a company LinkedIn URL', () => {
+  const rows = [
+    { name: 'Nihal T', city: 'A', linkedin_url: 'https://linkedin.com/company/xploitix' },
+    { name: 'Mani A', city: 'B', linkedin_url: 'https://linkedin.com/company/xploitix' },
+  ];
+  assert.equal(dedupeFounders(rows).length, 2, 'company URL must not be an identity key');
+});
+
+test('dedupe merges the same person with a case/spelling variant on the same /in/ URL', () => {
+  const rows = [
+    { name: 'Avinash matkar', city: 'Pune', linkedin_url: 'https://linkedin.com/in/avinash-x' },
+    { name: 'Avinash Matkar', city: 'Pune', linkedin_url: 'https://linkedin.com/in/avinash-x' },
+  ];
+  assert.equal(dedupeFounders(rows).length, 1);
+});
+
+test('dedupe does NOT merge clearly different people who share one /in/ URL (data error)', () => {
+  const rows = [
+    { name: 'Paul George', city: 'A', linkedin_url: 'https://linkedin.com/in/lohith-varma-vegesna' },
+    { name: 'Lohith Varma', city: 'B', linkedin_url: 'https://linkedin.com/in/lohith-varma-vegesna' },
+  ];
+  assert.equal(dedupeFounders(rows).length, 2, 'different names sharing one /in/ URL must stay separate');
+});
+
+test('dedupe collapses by name+city when there is no personal LinkedIn', () => {
+  const rows = [
+    { name: 'Same Person', city: 'Goa', linkedin_url: null },
+    { name: 'same person', city: 'goa', linkedin_url: 'https://linkedin.com/company/acme' },
+  ];
+  assert.equal(dedupeFounders(rows).length, 1);
 });
 
 test('hasAnyFilter recognizes every filter (not just the common few)', () => {
