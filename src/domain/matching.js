@@ -6,11 +6,12 @@ const { env } = require('../config/env');
 const { supabase } = require('../config/supabase');
 const { cofounderCandidates, candidatesByFilters, getBySlug } = require('./founders');
 const { buildSystemPrompt, buildUserPrompt } = require('./matchingPrompt');
+const { withRetry } = require('../lib/retry');
 const log = require('../lib/logger');
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // align with the 6-hour sync cadence
 
-function signature(requesterSlug, filters) {
+function signature(requesterSlug, filters, self) {
   const norm = JSON.stringify({
     r: requesterSlug || null,
     f: {
@@ -20,6 +21,18 @@ function signature(requesterSlug, filters) {
       stage: filters.stage || null,
       skills: (filters.skills || []).map((s) => s.toLowerCase()).sort(),
     },
+    // Self-description personalizes the target, so it MUST be part of the cache
+    // key — otherwise two anonymous users with the same filters but different
+    // backgrounds would share (wrong) cached results.
+    s: self
+      ? {
+          sector: self.sector || null,
+          city: (self.city || '').toLowerCase() || null,
+          stage: self.stage || null,
+          role: self.role || null,
+          skills: (self.skills || []).map((s) => s.toLowerCase()).sort(),
+        }
+      : null,
   });
   return crypto.createHash('sha1').update(norm).digest('hex');
 }
@@ -54,10 +67,25 @@ async function writeCache(requesterSlug, sig, results) {
 /**
  * Build the "target founder" the candidates are scored against.
  * - Known requester → their real profile (true complementarity).
- * - Anonymous → a synthetic target from the stated criteria.
+ * - Anonymous with a self-description → a target built from THEIR OWN skills/
+ *   sector/etc., so scoring measures complementarity to the user (not just the
+ *   filters). This is what makes matches feel personal for unlinked users.
+ * - Anonymous with nothing → a thin synthetic target from the stated criteria.
  */
-function buildTarget(requester, filters) {
+function buildTarget(requester, filters, self) {
   if (requester) return requester;
+  if (self && ((self.skills && self.skills.length) || self.sector || self.role || self.stage)) {
+    return {
+      name: 'the requester',
+      sector: self.sector || filters.sector || null,
+      city: self.city || filters.city || null,
+      skills: Array.isArray(self.skills) ? self.skills : [],
+      traits: Array.isArray(self.traits) ? self.traits : [],
+      dharma: self.dharma || null,
+      looking_for: ['co-founder, I have a startup'],
+      startup_stage: self.stage || filters.stage || null,
+    };
+  }
   return {
     name: 'the requester',
     sector: filters.sector || null,
@@ -74,8 +102,10 @@ function buildTarget(requester, filters) {
  * @param {string|null} requesterSlug
  * @returns {Promise<{results:object[], poolSize:number, cached:boolean, tooFew:boolean}>}
  */
-async function findCofounders(filters = {}, requesterSlug = null) {
-  const sig = signature(requesterSlug, filters);
+async function findCofounders(filters = {}, requesterSlug = null, self = null) {
+  // A linked profile always beats a chat-derived self-description.
+  const effectiveSelf = requesterSlug ? null : self;
+  const sig = signature(requesterSlug, filters, effectiveSelf);
 
   const cached = await readCache(requesterSlug, sig);
   if (cached) {
@@ -98,22 +128,31 @@ async function findCofounders(filters = {}, requesterSlug = null) {
     return { results: [], poolSize: 0, cached: false, tooFew: true, soft: false };
   }
 
-  const target = buildTarget(requester, filters);
+  const target = buildTarget(requester, filters, effectiveSelf);
   const system = buildSystemPrompt();
   const user = buildUserPrompt(target, candidates);
 
   let parsed;
   try {
-    const completion = await openai().chat.completions.create({
-      model: env.openai.model,
-      temperature: 0.3,
-      response_format: { type: 'json_object' },
-      max_tokens: 4000,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    });
+    // Disable the SDK's own (silent) retries and use our logged retry instead,
+    // so transient OpenAI failures are visible and not double-counted.
+    const completion = await withRetry(
+      () =>
+        openai().chat.completions.create(
+          {
+            model: env.openai.model,
+            temperature: 0.3,
+            response_format: { type: 'json_object' },
+            max_tokens: 4000,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: user },
+            ],
+          },
+          { maxRetries: 0 },
+        ),
+      { retries: 2, baseMs: 600, label: 'findCofounders' },
+    );
     parsed = JSON.parse(completion.choices?.[0]?.message?.content || '{}');
   } catch (err) {
     log.error('findCofounders OpenAI error:', err.message);
@@ -143,4 +182,4 @@ async function findCofounders(filters = {}, requesterSlug = null) {
   return { results, poolSize: candidates.length, cached: false, tooFew: results.length < 3, soft };
 }
 
-module.exports = { findCofounders };
+module.exports = { findCofounders, buildTarget };

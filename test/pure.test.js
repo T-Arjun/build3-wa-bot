@@ -7,6 +7,8 @@ const { parseInbound } = require('../src/whatsapp/parseInbound');
 const { mapFounder } = require('../src/sync/mapFounder');
 const fmt = require('../src/bot/format');
 const { COFOUNDER_INTENT } = require('../src/domain/enums');
+const { buildTarget } = require('../src/domain/matching');
+const { withRetry } = require('../src/lib/retry');
 
 test('parseInbound extracts a text message', () => {
   const body = {
@@ -108,4 +110,60 @@ test('format.avatarFor falls back to ui-avatars', () => {
 test('cofounder intent set matches source filter regex', () => {
   assert.ok(COFOUNDER_INTENT.length >= 3);
   assert.ok(COFOUNDER_INTENT.every((v) => /co-founder|join a startup/i.test(v)));
+});
+
+test('buildTarget uses the USER\'s own skills for anonymous complementarity', () => {
+  // "I'm technical, find me a sales cofounder": self.skills must be the target's
+  // skills, NOT the filter — so the scorer measures complement to the user.
+  const t = buildTarget(null, { skills: ['sales'] }, { skills: ['engineering'], sector: 'AI & Data' });
+  assert.deepEqual(t.skills, ['engineering']);
+  assert.equal(t.sector, 'AI & Data');
+});
+
+test('buildTarget falls back to a thin synthetic target with no self', () => {
+  const t = buildTarget(null, { sector: 'Financial Services' }, null);
+  assert.deepEqual(t.skills, []);
+  assert.equal(t.sector, 'Financial Services');
+});
+
+test('buildTarget prefers a linked requester profile over any self description', () => {
+  const req = { name: 'Real', skills: ['design'], sector: 'Healthcare' };
+  const t = buildTarget(req, { skills: ['sales'] }, { skills: ['engineering'] });
+  assert.equal(t.name, 'Real');
+  assert.deepEqual(t.skills, ['design']);
+});
+
+test('withRetry retries transient errors then succeeds', async () => {
+  let calls = 0;
+  const out = await withRetry(
+    async () => {
+      calls += 1;
+      if (calls < 2) {
+        const e = new Error('boom');
+        e.status = 503;
+        throw e;
+      }
+      return 'ok';
+    },
+    { retries: 2, baseMs: 1, label: 'test' },
+  );
+  assert.equal(out, 'ok');
+  assert.equal(calls, 2);
+});
+
+test('withRetry does NOT retry non-transient (4xx) errors', async () => {
+  let calls = 0;
+  await assert.rejects(
+    withRetry(
+      async () => {
+        calls += 1;
+        const e = new Error('bad request');
+        e.status = 400;
+        throw e;
+      },
+      { retries: 2, baseMs: 1, label: 'test' },
+    ),
+    /bad request/,
+  );
+  assert.equal(calls, 1);
 });
