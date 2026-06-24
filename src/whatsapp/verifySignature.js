@@ -11,7 +11,18 @@ const log = require('../lib/logger');
  */
 function verifySignature(req) {
   if (!env.whatsapp.appSecret) {
-    log.warn('WHATSAPP_APP_SECRET not set — skipping signature verification');
+    if (env.whatsapp.allowUnsigned) {
+      log.warn('WHATSAPP_APP_SECRET not set — allowing unsigned webhook (ALLOW_UNSIGNED_WEBHOOKS=true)');
+      return true;
+    }
+    if (env.nodeEnv === 'production') {
+      // Fail closed: an unauthenticated webhook in prod lets anyone spoof messages.
+      log.error(
+        'WHATSAPP_APP_SECRET not set in production — REJECTING webhook. Set the secret, or ALLOW_UNSIGNED_WEBHOOKS=true to bypass intentionally.',
+      );
+      return false;
+    }
+    log.warn('WHATSAPP_APP_SECRET not set — skipping signature verification (non-production)');
     return true;
   }
   const header = req.get('x-hub-signature-256') || '';

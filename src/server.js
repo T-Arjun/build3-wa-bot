@@ -72,7 +72,13 @@ const server = app.listen(env.port, () => {
     'openai.apiKey',
     'whatsapp.token',
     'whatsapp.phoneNumberId',
+    'whatsapp.appSecret',
   ]);
+  if (!env.whatsapp.appSecret && env.nodeEnv === 'production' && !env.whatsapp.allowUnsigned) {
+    log.error(
+      'SECURITY: WHATSAPP_APP_SECRET is not set — inbound webhooks will be REJECTED. Set it in the environment to bring the bot online.',
+    );
+  }
   if (env.supabase.url && env.source.apiBase) {
     startSyncSchedule();
   } else {
