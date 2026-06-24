@@ -17,8 +17,10 @@ async function run(input) {
   const ctx = {
     outbox: [],
     state: {},
+    waId: input.waId || null,
     requesterSlug: input.requesterSlug || null,
     requesterName: input.requesterName || null,
+    self: input.self || null,
   };
 
   const identity = ctx.requesterSlug
@@ -36,6 +38,14 @@ async function run(input) {
       content:
         'FOCUS — the founder the user is currently viewing. Answer any question about them using ONLY these facts; never invent a sector, skill, stage, or startup detail. If a field is null/empty, say you don\'t have that detail.\n' +
         JSON.stringify(input.focus),
+    });
+  }
+  if (input.self && Object.keys(input.self).length) {
+    messages.push({
+      role: 'system',
+      content:
+        "KNOWN ABOUT THE USER (their OWN background — use this for cofounder complementarity and do NOT ask for it again): " +
+        JSON.stringify(input.self),
     });
   }
   messages.push(...history, { role: 'user', content: input.text || '' });
@@ -71,6 +81,11 @@ async function run(input) {
           log.error(`tool ${name} failed:`, err.message);
           result = { status: 'error', message: 'tool failed' };
         }
+        // One observability line per turn: what the model extracted and what it got.
+        // Lets us diagnose "the bot is dumb" from logs alone (wa, text, tool, filters, count).
+        log.info(
+          `turn wa=${ctx.waId || '?'} "${snippet(input.text)}" → ${name} ${JSON.stringify(args)} → ${toolResultSummary(result)}`,
+        );
         messages.push({
           role: 'tool',
           tool_call_id: call.id,
@@ -81,10 +96,30 @@ async function run(input) {
     }
 
     finalText = (msg.content || '').trim();
+    log.info(`turn wa=${ctx.waId || '?'} "${snippet(input.text)}" → reply "${snippet(finalText)}"`);
     break;
   }
 
   return { outbox: ctx.outbox, finalText, state: ctx.state, assistantSummary: summarize(finalText, ctx.outbox) };
+}
+
+/** Collapse whitespace and clip for a single-line log entry. */
+function snippet(s, n = 80) {
+  s = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
+
+/** Compact one-line summary of a tool result for logs. */
+function toolResultSummary(r) {
+  if (!r) return '∅';
+  const parts = [r.status || 'ok'];
+  if (r.count != null) parts.push(`count=${r.count}`);
+  if (r.shown != null) parts.push(`shown=${r.shown}`);
+  if (r.total != null) parts.push(`total=${r.total}`);
+  if (r.poolSize != null) parts.push(`pool=${r.poolSize}`);
+  if (Array.isArray(r.candidates)) parts.push(`candidates=${r.candidates.length}`);
+  if (r.soft) parts.push('soft');
+  return parts.join(' ');
 }
 
 /**

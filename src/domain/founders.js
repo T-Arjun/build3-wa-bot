@@ -3,6 +3,7 @@
 const { supabase } = require('../config/supabase');
 const { COFOUNDER_INTENT } = require('./enums');
 const { expandLocation } = require('./geo');
+const log = require('../lib/logger');
 
 /**
  * Founder queries over Supabase. All reads are scoped to published profiles.
@@ -107,6 +108,8 @@ function applyFilters(q, filters = {}) {
     } else if (list.length > 1) {
       q = q.or(list.map((t) => `city.ilike.*${t}*`).join(','));
     }
+    // DEBUG=1 shows how a city/state expanded — the Kerala-returns-2 class of bug.
+    log.debug('city expand', JSON.stringify(filters.city), '→', JSON.stringify(list));
   }
   if (Number.isInteger(filters.cohort)) q = q.eq('cohort', filters.cohort);
   if (filters.program) q = q.eq('program', filters.program);
