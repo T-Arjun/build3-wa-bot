@@ -64,6 +64,7 @@ async function handleEvent(ev) {
       history,
       focus: conv.draft?.focus || null,
       self: conv.draft?.self || null,
+      prevMatchSlugs: (conv.draft?.match_cache || []).map((m) => m.slug),
     });
 
     await sendOutbox(to, outbox);

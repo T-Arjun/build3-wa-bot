@@ -39,6 +39,18 @@ test('unknown location falls back to itself', () => {
   assert.deepStrictEqual(r.terms, ['atlantis']);
 });
 
+test('NCR is a region spanning Delhi + Gurgaon + Noida (not just Delhi)', () => {
+  for (const q of ['NCR', 'Delhi NCR', 'National Capital Region']) {
+    const r = expandLocation(q);
+    assert.strictEqual(r.isRegion, true, `${q} should be a region`);
+    assert.ok(r.terms.includes('gurgaon'), `${q} must include Gurgaon`);
+    assert.ok(r.terms.includes('gurugram'));
+    assert.ok(r.terms.includes('noida'), `${q} must include Noida`);
+    assert.ok(r.terms.includes('delhi'));
+    assert.ok(r.terms.includes('faridabad'));
+  }
+});
+
 test('blob tokens fold state + aliases into messy city strings', () => {
   const t = blobLocationTokens('Kochi / Kerala');
   assert.ok(t.includes('kerala'));

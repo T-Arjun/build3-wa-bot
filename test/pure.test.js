@@ -10,7 +10,7 @@ const { COFOUNDER_INTENT } = require('../src/domain/enums');
 const { buildTarget } = require('../src/domain/matching');
 const { withRetry } = require('../src/lib/retry');
 const { hasAnyFilter, toFilters } = require('../src/bot/tools');
-const { dedupeFounders } = require('../src/domain/founders');
+const { dedupeFounders, isShowable } = require('../src/domain/founders');
 
 test('parseInbound extracts a text message', () => {
   const body = {
@@ -179,10 +179,31 @@ test('dedupe does NOT merge clearly different people who share one /in/ URL (dat
 
 test('dedupe collapses by name+city when there is no personal LinkedIn', () => {
   const rows = [
-    { name: 'Same Person', city: 'Goa', linkedin_url: null },
-    { name: 'same person', city: 'goa', linkedin_url: 'https://linkedin.com/company/acme' },
+    { name: 'Same Person', city: 'Goa', startup_name: 'Acme', linkedin_url: null },
+    { name: 'same person', city: 'goa', startup_name: 'Acme', linkedin_url: 'https://linkedin.com/company/acme' },
   ];
   assert.equal(dedupeFounders(rows).length, 1);
+});
+
+test('isShowable rejects shell profiles, keeps anything with real content', () => {
+  // Shell: just name + cohort + sector "Other", no startup/skills/linkedin.
+  assert.equal(isShowable({ name: 'Priyanka Agnani', sector: 'Other', cohort: 2 }), false);
+  assert.equal(isShowable({ name: 'Empty', city: 'Goa' }), false);
+  // Real content of any kind makes it showable.
+  assert.equal(isShowable({ name: 'A', startup_name: 'Acme' }), true);
+  assert.equal(isShowable({ name: 'B', skills: ['sales'] }), true);
+  assert.equal(isShowable({ name: 'C', sector: 'Financial Services' }), true);
+  assert.equal(isShowable({ name: 'D', linkedin_url: 'https://linkedin.com/in/d' }), true);
+});
+
+test('dedupe drops shell profiles from results', () => {
+  const rows = [
+    { name: 'Real Person', city: 'Pune', startup_name: 'Acme', linkedin_url: 'https://linkedin.com/in/real' },
+    { name: 'Shell Person', city: 'Delhi', sector: 'Other' },
+  ];
+  const out = dedupeFounders(rows);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].name, 'Real Person');
 });
 
 test('hasAnyFilter recognizes every filter (not just the common few)', () => {

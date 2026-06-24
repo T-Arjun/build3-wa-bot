@@ -186,6 +186,18 @@ const impls = {
     if (poolSize === 0 || results.length === 0) {
       return { status: 'too_few', poolSize };
     }
+    // Drop people already surfaced in the previous match set so "find another"
+    // doesn't re-paste identical cards. If everyone matching was already shown,
+    // say so (no cards) instead of repeating them.
+    const prevShown = new Set(ctx.prevMatchSlugs || []);
+    const fresh = results.filter((m) => !prevShown.has(m.slug));
+    if (fresh.length === 0) {
+      return {
+        status: 'no_new_matches',
+        total: results.length,
+        note: 'Everyone matching these criteria was already shown. Tell the user there are no new matches and offer to broaden (different skill, sector, or city). Do NOT repeat their cards.',
+      };
+    }
     if (soft) {
       ctx.outbox.push({
         kind: 'text',
@@ -195,26 +207,28 @@ const impls = {
           'though if you like, we can help you start a conversation with them:',
       });
     }
-    const top = results.slice(0, 3);
+    const top = fresh.slice(0, 3);
     for (const m of top) {
       ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(m), caption: fmt.matchCaption(m) });
     }
-    if (results.length > 3) {
+    // Record everyone in this fresh set as shown (for pagination + next-turn
+    // exclusion), even if only the top 3 are on screen now.
+    ctx.state.last_results = fresh.map((m) => m.slug);
+    ctx.state.match_cache = fresh;
+    if (fresh.length > 3) {
       ctx.outbox.push({
         kind: 'buttons',
-        body: `${results.length - 3} more match${results.length - 3 === 1 ? '' : 'es'} available.`,
+        body: `${fresh.length - 3} more match${fresh.length - 3 === 1 ? '' : 'es'} available.`,
         buttons: [{ id: 'more:matches', title: 'More matches' }],
       });
-      ctx.state.last_results = results.map((m) => m.slug);
-      ctx.state.match_cache = results;
     }
     return {
       status: 'ok',
       soft,
       shown: top.length,
-      total: results.length,
+      total: fresh.length,
       top: top.map((m) => `${m.name} (${m.score})`),
-      tooFew,
+      tooFew: fresh.length < 3,
     };
   },
 

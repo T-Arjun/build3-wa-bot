@@ -71,6 +71,22 @@ function identityKey(f) {
   return h ? `in:${h}` : `nc:${(f.name || '').toLowerCase().trim()}|${(f.city || '').toLowerCase().trim()}`;
 }
 
+/**
+ * Is there anything worth showing for this founder? Shell profiles (just a name +
+ * "Cohort N", no startup/skills/sector/LinkedIn) render as broken-looking cards,
+ * so we exclude them. NOTE: callers must select the content columns
+ * (startup_name, startup_idea, skills, sector, linkedin_url) for this to work.
+ */
+function isShowable(f) {
+  return !!(
+    f.startup_name ||
+    f.startup_idea ||
+    (Array.isArray(f.skills) && f.skills.length) ||
+    (f.sector && String(f.sector).toLowerCase() !== 'other') ||
+    f.linkedin_url
+  );
+}
+
 /** Collapse rows that are the same person, keeping the most complete record. */
 function dedupeFounders(rows) {
   const completeness = (f) =>
@@ -97,7 +113,8 @@ function dedupeFounders(rows) {
     const cur = byKey.get(k);
     if (!cur || completeness(f) > completeness(cur)) byKey.set(k, f);
   }
-  return Array.from(byKey.values());
+  // Drop shell profiles so they never surface as (broken-looking) results.
+  return Array.from(byKey.values()).filter(isShowable);
 }
 
 async function findByWaId(waId) {
@@ -180,11 +197,11 @@ async function searchFounders(filters = {}, limit = 10) {
 }
 
 async function countFounders(filters = {}) {
-  // Count DISTINCT people, not raw rows — otherwise "Found 2" can show 1 after
-  // dedupe collapses duplicate records. Uses the same identity key as the list.
+  // Count DISTINCT, SHOWABLE people — not raw rows — so the number always equals
+  // what the list actually renders. Needs the content columns isShowable checks.
   let q = supabase()
     .from('founders')
-    .select('linkedin_url,name,city')
+    .select('linkedin_url,name,city,startup_name,startup_idea,skills,sector')
     .eq('is_published', true);
   q = applyFilters(q, filters);
   const { data, error } = await q;
@@ -273,4 +290,5 @@ module.exports = {
   candidatesByFilters,
   dedupeFounders,
   namesSimilar,
+  isShowable,
 };

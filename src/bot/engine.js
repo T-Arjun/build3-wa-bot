@@ -21,6 +21,7 @@ async function run(input) {
     requesterSlug: input.requesterSlug || null,
     requesterName: input.requesterName || null,
     self: input.self || null,
+    prevMatchSlugs: input.prevMatchSlugs || [],
   };
 
   const identity = ctx.requesterSlug

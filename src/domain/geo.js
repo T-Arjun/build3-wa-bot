@@ -124,8 +124,16 @@ const STATE_ALIASES = {
   'mp': 'madhya pradesh',
   'ap': 'andhra pradesh',
   'wb': 'west bengal',
-  'ncr': 'delhi',
 };
+
+// Multi-state metro regions: a region spans cities across several states, so it
+// can't be a state alias. "NCR" must include Gurgaon (Haryana) and Noida (UP),
+// not just Delhi — otherwise a search for "NCR" silently misses them.
+const REGIONS = {
+  ncr: ['delhi', 'new delhi', 'south delhi', 'north delhi', 'gurugram', 'gurgaon', 'noida', 'greater noida', 'ghaziabad', 'faridabad'],
+};
+REGIONS['delhi ncr'] = REGIONS.ncr;
+REGIONS['national capital region'] = REGIONS.ncr;
 
 // Reverse maps, built once.
 const STATE_TO_CITIES = {};
@@ -149,6 +157,11 @@ for (const group of ALIAS_GROUPS) {
 function expandLocation(text) {
   const q = normalize(text);
   if (!q) return { isState: false, state: null, terms: [] };
+
+  // 0) Is it a multi-state metro region (NCR)? Expand to all its cities.
+  if (REGIONS[q]) {
+    return { isState: false, isRegion: true, state: null, terms: Array.from(new Set(REGIONS[q])) };
+  }
 
   // 1) Is it a state (or state alias)?
   const stateName = STATES.has(q) ? q : STATE_ALIASES[q];
