@@ -58,10 +58,12 @@ async function handleEvent(ev) {
     const history = Array.isArray(conv.history) ? conv.history : [];
     const { outbox, finalText, state, assistantSummary } = await engine.run({
       text: ev.text || '',
+      waId: to,
       requesterSlug,
       requesterName,
       history,
       focus: conv.draft?.focus || null,
+      self: conv.draft?.self || null,
     });
 
     await sendOutbox(to, outbox);
@@ -88,6 +90,9 @@ async function handleEvent(ev) {
 function persistDraft(conv, state) {
   const draft = { ...(conv.draft || {}) };
   draft.intro_sent = true; // disclaimer shown once per conversation
+  // The user's own background persists for the whole session (survives topic
+  // changes) so every later cofounder match stays personalized to them.
+  if (state.self) draft.self = state.self;
   if (state.match_cache) {
     draft.match_cache = state.match_cache;
     draft.match_offset = MATCH_PAGE;

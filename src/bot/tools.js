@@ -64,6 +64,25 @@ const definitions = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'set_self_profile',
+      description:
+        "Record what the USER says about THEMSELVES — their OWN skills, sector, city, stage, or role — so cofounder matches are scored as complementary to them (not just filtered). Call this whenever the user reveals their own background, e.g. \"I'm a technical founder\", \"I can do sales and growth\", \"I'm building a fintech in Bangalore\". This is about the user themselves, NOT about who they are looking for.",
+      parameters: {
+        type: 'object',
+        properties: {
+          skills: { type: 'array', items: { type: 'string' }, description: "the user's OWN skills" },
+          sector: { type: 'string', enum: SECTORS },
+          city: { type: 'string' },
+          stage: { type: 'string', enum: STARTUP_STAGES },
+          role: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 function toFilters(args = {}) {
@@ -139,7 +158,11 @@ const impls = {
     // No hard "need criteria" gate — a broad search returns sensible results
     // (cofounder-seekers, or soft fallback). The engine clarifies at most once
     // at the conversation layer; once the user wants results, we always show some.
-    const { results, poolSize, tooFew, soft } = await findCofounders(filters, ctx.requesterSlug);
+    const { results, poolSize, tooFew, soft } = await findCofounders(
+      filters,
+      ctx.requesterSlug,
+      ctx.self,
+    );
     ctx.state.topic_changed = true;
     if (poolSize === 0 || results.length === 0) {
       return { status: 'too_few', poolSize };
@@ -173,6 +196,22 @@ const impls = {
       total: results.length,
       top: top.map((m) => `${m.name} (${m.score})`),
       tooFew,
+    };
+  },
+
+  async set_self_profile(args, ctx) {
+    const self = { ...(ctx.self || {}) };
+    if (Array.isArray(args.skills) && args.skills.length) self.skills = args.skills;
+    if (args.sector) self.sector = args.sector;
+    if (args.city) self.city = args.city;
+    if (args.stage) self.stage = args.stage;
+    if (args.role) self.role = args.role;
+    ctx.self = self; // a find_cofounders call in this SAME turn picks it up
+    ctx.state.self = self; // persisted by the handler for the rest of the session
+    return {
+      status: 'saved',
+      self,
+      note: 'Saved their background. If they were after a cofounder, call find_cofounders now so matches are personalized to them. Do not ask for this info again.',
     };
   },
 };
