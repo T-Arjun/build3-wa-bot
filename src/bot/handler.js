@@ -20,11 +20,9 @@ const MATCH_PAGE = 3;
 async function handleEvent(ev) {
   const to = ev.waId;
 
-  // Acknowledge immediately — blue ticks + typing bubble before any async work.
-  if (ev.messageId) {
-    wa.markRead(ev.messageId);
-    wa.sendTyping(to);
-  }
+  // Acknowledge immediately — blue ticks + typing bubble (one combined call)
+  // before any async work, so it lands within ~50ms of the message arriving.
+  if (ev.messageId) wa.markRead(ev.messageId);
 
   // Graceful degrade: until the database/source are wired, confirm we're online
   // so the WhatsApp inbound→outbound loop is testable on its own.

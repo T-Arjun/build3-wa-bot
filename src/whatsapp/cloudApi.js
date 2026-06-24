@@ -100,33 +100,25 @@ function sendImage(to, imageUrl, caption) {
 }
 
 /**
- * Mark a received message as read — shows blue double-ticks to the sender.
- * POST body: { messaging_product, status: "read", message_id }
- * Ref: https://developers.facebook.com/docs/whatsapp/cloud-api/guides/mark-message-as-read/
+ * Mark a received message as read AND show a typing indicator — in ONE call.
+ *
+ * The typing indicator is NOT a standalone message type. The /messages endpoint
+ * rejects type:"typing_indicator" (its enum is audio/text/image/interactive/…),
+ * which is why a separate typing call 400s. Instead the indicator rides along
+ * with the read-receipt request, keyed on message_id: blue double-ticks appear
+ * immediately, and a "typing…" bubble shows for up to 25s or until the next
+ * outbound message, whichever comes first.
+ * Ref: https://developers.facebook.com/docs/whatsapp/cloud-api/typing-indicators/
  */
 function markRead(messageId) {
   if (!messageId) return Promise.resolve();
-  log.info('markRead', messageId);
-  return send({ status: 'read', message_id: messageId }).catch((err) => {
-    log.warn('markRead failed:', err.message);
-  });
-}
-
-/**
- * Show a typing indicator while the bot is processing.
- * POST body: { messaging_product, recipient_type, to, type: "typing_indicator",
- *              typing_indicator: { type: "text" } }
- * Ref: https://developers.facebook.com/docs/whatsapp/cloud-api/typing-indicators/
- */
-function sendTyping(to) {
-  if (!to) return Promise.resolve();
+  log.info('markRead+typing', messageId);
   return send({
-    recipient_type: 'individual',
-    to,
-    type: 'typing_indicator',
+    status: 'read',
+    message_id: messageId,
     typing_indicator: { type: 'text' },
   }).catch((err) => {
-    log.warn('sendTyping failed:', err.message);
+    log.warn('markRead failed:', err.message);
   });
 }
 
@@ -135,4 +127,4 @@ function truncate(s, n) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
-module.exports = { send, sendText, sendButtons, sendList, sendImage, markRead, sendTyping };
+module.exports = { send, sendText, sendButtons, sendList, sendImage, markRead };
