@@ -148,14 +148,16 @@ async function searchFounders(filters = {}, limit = 10) {
 }
 
 async function countFounders(filters = {}) {
+  // Count DISTINCT people, not raw rows — otherwise "Found 2" can show 1 after
+  // dedupe collapses duplicate records. Uses the same identity key as the list.
   let q = supabase()
     .from('founders')
-    .select('source_slug', { count: 'exact', head: true })
+    .select('linkedin_url,name,city')
     .eq('is_published', true);
   q = applyFilters(q, filters);
-  const { count, error } = await q;
+  const { data, error } = await q;
   if (error) throw new Error(`countFounders: ${error.message}`);
-  return count || 0;
+  return new Set((data || []).map(identityKey)).size;
 }
 
 async function getBySlug(slug) {

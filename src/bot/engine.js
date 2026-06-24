@@ -127,13 +127,23 @@ function toolResultSummary(r) {
  * history conveys what was shown (lists/cards don't go through finalText).
  */
 function summarize(finalText, outbox) {
-  const parts = [];
+  // What was already shown this turn, kept as the assistant's private memory so
+  // the next turn can resolve "the first one" etc. Framed as an internal note
+  // (no square brackets) and guarded by a prompt rule so the model never echoes it.
+  const shown = [];
   for (const m of outbox) {
-    if (m.kind === 'list') parts.push(`[showed list: ${(m.rows || []).map((r) => r.title).slice(0, 6).join(', ')}]`);
-    else if (m.kind === 'image') parts.push(`[showed: ${String(m.caption || '').split('\n')[0]}]`);
-    else if (m.kind === 'buttons') parts.push(`[buttons: ${m.body}]`);
-    else if (m.kind === 'text') parts.push(m.body);
+    if (m.kind === 'list') {
+      shown.push(`a list of founders: ${(m.rows || []).map((r) => r.title).slice(0, 8).join(', ')}`);
+    } else if (m.kind === 'image') {
+      shown.push(`the profile of ${String(m.caption || '').split('\n')[0].replace(/\*/g, '').trim()}`);
+    } else if (m.kind === 'buttons') {
+      shown.push('a follow-up prompt');
+    } else if (m.kind === 'text') {
+      shown.push(m.body);
+    }
   }
+  const parts = [];
+  if (shown.length) parts.push(`(internal note — already shown to the user: ${shown.join('; ')})`);
   if (finalText) parts.push(finalText);
   return parts.join(' ').slice(0, 600) || '(no reply)';
 }

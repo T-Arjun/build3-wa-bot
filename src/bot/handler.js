@@ -122,7 +122,7 @@ async function routeReply(ev, to, conv, baseState) {
       const ctx = { outbox: [] };
       pushProfile(ctx, f);
       await sendOutbox(to, ctx.outbox);
-      hist.push({ role: 'assistant', content: `[showed profile: ${f.name}]` });
+      hist.push({ role: 'assistant', content: `(internal note — already shown to the user: the profile of ${f.name})` });
       draft.focus = fmt.focusFields(f); // so follow-ups answer from real data
     } else {
       await wa.sendText(to, "I couldn't find that profile anymore.");
