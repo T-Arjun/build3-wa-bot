@@ -100,8 +100,21 @@ function toFilters(args = {}) {
 }
 
 function hasAnyFilter(f) {
-  return !!(f.sector || f.city || f.cohort || f.stage || (f.skills && f.skills.length) || f.query);
+  return !!(
+    f.sector ||
+    f.city ||
+    f.cohort ||
+    f.stage ||
+    f.program ||
+    f.role ||
+    (f.skills && f.skills.length) ||
+    (f.lookingFor && f.lookingFor.length) ||
+    f.query
+  );
 }
+
+const SHOWN_NOTE =
+  'The full profile card (photo + startup, sector, city, skills, LinkedIn) has ALREADY been sent to the user. Do NOT offer to show the profile again. Keep any text to a one-line confirmation; you may offer "similar founders".';
 
 /** Tool implementations. Each receives (args, ctx) and returns a summary object for the model. */
 const impls = {
@@ -113,6 +126,13 @@ const impls = {
       return { status: 'too_broad', count };
     }
     const results = await founders.searchFounders(filters, 10);
+    // Exactly one founder → show the profile directly. A 1-row "tap to view" list
+    // is clunky, and this also covers the case where duplicate rows dedupe to one.
+    if (results.length === 1) {
+      pushProfile(ctx, results[0]);
+      ctx.state.focus = fmt.focusFields(results[0]);
+      return { status: 'shown', name: results[0].name, facts: ctx.state.focus, note: SHOWN_NOTE };
+    }
     ctx.outbox.push({
       kind: 'list',
       body: `Found ${count}${count > results.length ? ` — showing ${results.length}` : ''}. Tap one to view:`,
@@ -125,8 +145,7 @@ const impls = {
   },
 
   async get_profile(args, ctx) {
-    const shownNote =
-      'The full profile card (photo + startup, sector, city, skills, LinkedIn) has ALREADY been sent to the user. Do NOT offer to show the profile again. Keep any text to a one-line confirmation; you may offer "similar founders".';
+    const shownNote = SHOWN_NOTE;
     if (args.slug) {
       const f = await founders.getBySlug(args.slug);
       if (!f) return { status: 'none' };
@@ -220,4 +239,4 @@ function pushProfile(ctx, f) {
   ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(f), caption: fmt.profileCaption(f) });
 }
 
-module.exports = { definitions, impls, pushProfile };
+module.exports = { definitions, impls, pushProfile, hasAnyFilter, toFilters };

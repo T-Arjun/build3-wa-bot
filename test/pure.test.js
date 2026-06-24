@@ -9,6 +9,7 @@ const fmt = require('../src/bot/format');
 const { COFOUNDER_INTENT } = require('../src/domain/enums');
 const { buildTarget } = require('../src/domain/matching');
 const { withRetry } = require('../src/lib/retry');
+const { hasAnyFilter, toFilters } = require('../src/bot/tools');
 
 test('parseInbound extracts a text message', () => {
   const body = {
@@ -149,6 +150,17 @@ test('withRetry retries transient errors then succeeds', async () => {
   );
   assert.equal(out, 'ok');
   assert.equal(calls, 2);
+});
+
+test('hasAnyFilter recognizes every filter (not just the common few)', () => {
+  assert.equal(hasAnyFilter({}), false);
+  assert.equal(hasAnyFilter(toFilters({ looking_for: ['co-founder, I have a startup'] })), true);
+  assert.equal(hasAnyFilter(toFilters({ sector: 'AI & Data' })), true);
+  assert.equal(hasAnyFilter(toFilters({ skills: ['sales'] })), true);
+  assert.equal(hasAnyFilter(toFilters({ query: 'fintech' })), true);
+  // program/role aren't in the search tool schema but applyFilters supports them.
+  assert.equal(hasAnyFilter({ program: 'biA' }), true);
+  assert.equal(hasAnyFilter({ role: 'mentor' }), true);
 });
 
 test('withRetry does NOT retry non-transient (4xx) errors', async () => {
