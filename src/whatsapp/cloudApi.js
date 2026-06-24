@@ -99,9 +99,29 @@ function sendImage(to, imageUrl, caption) {
   });
 }
 
+/**
+ * Mark a received message as read — shows blue double-ticks to the sender
+ * immediately. Call fire-and-forget as soon as the inbound message arrives.
+ */
+function markRead(messageId) {
+  if (!messageId) return Promise.resolve();
+  return send({ status: 'read', message_id: messageId }).catch((err) => {
+    log.warn('markRead failed:', err.message);
+  });
+}
+
+/**
+ * Show a typing indicator while the bot is processing.
+ * Supported on Cloud API v20+; fails silently if unavailable on the account tier.
+ */
+function sendTyping(to) {
+  if (!to) return Promise.resolve();
+  return send({ to, recipient_type: 'individual', type: 'typing' }).catch(() => {});
+}
+
 function truncate(s, n) {
   s = String(s == null ? '' : s);
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
-module.exports = { send, sendText, sendButtons, sendList, sendImage };
+module.exports = { send, sendText, sendButtons, sendList, sendImage, markRead, sendTyping };

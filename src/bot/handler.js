@@ -20,6 +20,12 @@ const MATCH_PAGE = 3;
 async function handleEvent(ev) {
   const to = ev.waId;
 
+  // Acknowledge immediately — blue ticks + typing bubble before any async work.
+  if (ev.messageId) {
+    wa.markRead(ev.messageId);
+    wa.sendTyping(to);
+  }
+
   // Graceful degrade: until the database/source are wired, confirm we're online
   // so the WhatsApp inbound→outbound loop is testable on its own.
   if (!env.supabase.url || !env.supabase.serviceKey) {
