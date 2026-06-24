@@ -88,7 +88,15 @@ function persistDraft(conv, state) {
     draft.match_cache = state.match_cache;
     draft.match_offset = MATCH_PAGE;
   }
-  if (state.focus) draft.focus = state.focus; // ground follow-up Q&A on real data
+  if (state.focus) {
+    // New profile viewed this turn — update FOCUS and clear stale match context.
+    draft.focus = state.focus;
+    delete draft.match_cache;
+    delete draft.match_offset;
+  } else if (state.topic_changed) {
+    // search_founders or find_cofounders was called — user moved on, stale FOCUS is wrong.
+    delete draft.focus;
+  }
   return draft;
 }
 

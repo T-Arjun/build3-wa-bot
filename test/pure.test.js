@@ -95,7 +95,9 @@ test('format.toRow encodes profile action id', () => {
   const r = fmt.toRow({ source_slug: 'asha-r', name: 'Asha R', sector: 'AI & Data', city: 'Pune' });
   assert.equal(r.id, 'profile:asha-r');
   assert.equal(r.title, 'Asha R');
-  assert.ok(r.description.includes('AI & Data'));
+  // subtitle() prioritises startup data over sector tag — with none, falls through to city
+  assert.ok(r.description.includes('Pune'), 'city should appear when no startup data');
+  assert.ok(!r.description.includes('AI & Data'), 'sector tag must not be used as description');
 });
 
 test('format.avatarFor falls back to ui-avatars', () => {

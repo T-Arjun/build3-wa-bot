@@ -115,12 +115,18 @@ function applyFilters(q, filters = {}) {
   if (Array.isArray(filters.lookingFor) && filters.lookingFor.length) {
     q = q.overlaps('looking_for', pgArray(filters.lookingFor));
   }
-  // Skills + free text are fuzzy → matched via search_blob ilike (any term).
-  const terms = [];
-  if (Array.isArray(filters.skills)) terms.push(...filters.skills);
-  if (filters.query) terms.push(filters.query);
-  for (const t of terms) {
-    const clean = String(t).toLowerCase().trim();
+  // Skills: OR semantics — a founder matching ANY listed skill is relevant.
+  if (Array.isArray(filters.skills) && filters.skills.length) {
+    const skillTerms = filters.skills.map((t) => String(t).toLowerCase().trim()).filter(Boolean);
+    if (skillTerms.length === 1) {
+      q = q.ilike('search_blob', `%${skillTerms[0]}%`);
+    } else if (skillTerms.length > 1) {
+      q = q.or(skillTerms.map((t) => `search_blob.ilike.*${t}*`).join(','));
+    }
+  }
+  // Free-text query is AND'd on top of skill/filter results.
+  if (filters.query) {
+    const clean = String(filters.query).toLowerCase().trim();
     if (clean) q = q.ilike('search_blob', `%${clean}%`);
   }
   return q;

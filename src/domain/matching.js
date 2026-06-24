@@ -130,6 +130,7 @@ async function findCofounders(filters = {}, requesterSlug = null) {
         sector: c.sector,
         city: c.city,
         startup_name: c.startup_name,
+        startup_idea: c.startup_idea,
         avatar_url: c.avatar_url,
         score: Math.min(100, Math.max(0, Math.round(m.score))),
         reasons: Array.isArray(m.reasons) ? m.reasons.slice(0, 2) : [],

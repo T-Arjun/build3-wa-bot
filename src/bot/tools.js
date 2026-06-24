@@ -101,6 +101,7 @@ const impls = {
       rows: results.map(fmt.toRow),
     });
     ctx.state.last_results = results.map((f) => f.source_slug);
+    ctx.state.topic_changed = true;
     return { status: 'ok', count, shown: results.length, names: results.map((f) => f.name) };
   },
 
@@ -139,6 +140,7 @@ const impls = {
     // (cofounder-seekers, or soft fallback). The engine clarifies at most once
     // at the conversation layer; once the user wants results, we always show some.
     const { results, poolSize, tooFew, soft } = await findCofounders(filters, ctx.requesterSlug);
+    ctx.state.topic_changed = true;
     if (poolSize === 0 || results.length === 0) {
       return { status: 'too_few', poolSize };
     }
