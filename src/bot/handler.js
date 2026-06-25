@@ -5,6 +5,7 @@ const engine = require('./engine');
 const founders = require('../domain/founders');
 const { getConversation, saveConversation } = require('./conversation');
 const { sendOutbox } = require('./sendOutbox');
+const { resolveTypedSelection } = require('./ordinal');
 const { pushProfile } = require('./tools');
 const fmt = require('./format');
 const wa = require('../whatsapp/cloudApi');
@@ -48,6 +49,14 @@ async function handleEvent(ev) {
     if (handled) return;
   }
 
+  // 1.5) Typed list selection ("2", "show the first one") — deterministic, pre-LLM.
+  // Goes slug → getBySlug, bypassing the brittle name lookup, and commits focus
+  // ONLY if the card actually sent.
+  if (ev.text && Array.isArray(conv.last_results) && conv.last_results.length) {
+    const handled = await routeTypedSelection(ev, to, conv, baseState);
+    if (handled) return;
+  }
+
   // 2) Conversational turn.
   try {
     // One-time beta disclaimer on a user's first interaction.
@@ -67,7 +76,8 @@ async function handleEvent(ev) {
       prevMatchSlugs: (conv.draft?.match_cache || []).map((m) => m.slug),
     });
 
-    await sendOutbox(to, outbox);
+    const sendResults = await sendOutbox(to, outbox);
+    const allSent = sendResults.every((r) => r.ok);
     if (finalText) await wa.sendText(to, finalText);
 
     const newHistory = [
@@ -80,7 +90,7 @@ async function handleEvent(ev) {
       ...baseState,
       last_results: state.last_results || conv.last_results || [],
       history: newHistory,
-      draft: persistDraft(conv, state),
+      draft: persistDraft(conv, state, allSent),
     });
   } catch (err) {
     log.error('handleEvent engine error:', err.message);
@@ -88,7 +98,7 @@ async function handleEvent(ev) {
   }
 }
 
-function persistDraft(conv, state) {
+function persistDraft(conv, state, sendsOk = true) {
   const draft = { ...(conv.draft || {}) };
   draft.intro_sent = true; // disclaimer shown once per conversation
   // The user's own background persists for the whole session (survives topic
@@ -98,8 +108,10 @@ function persistDraft(conv, state) {
     draft.match_cache = state.match_cache;
     draft.match_offset = MATCH_PAGE;
   }
-  if (state.focus) {
-    // New profile viewed this turn — update FOCUS and clear stale match context.
+  if (state.focus && sendsOk) {
+    // New profile viewed this turn AND its card actually sent — update FOCUS and
+    // clear stale match context. If the send failed, do NOT point focus at a card
+    // the user never saw (their follow-ups would get confidently-wrong facts).
     draft.focus = state.focus;
     delete draft.match_cache;
     delete draft.match_offset;
@@ -108,6 +120,44 @@ function persistDraft(conv, state) {
     delete draft.focus;
   }
   return draft;
+}
+
+/**
+ * Handle a typed list reference ("2", "show the first one") deterministically,
+ * before the LLM. Returns true if it was an ordinal reference we resolved.
+ */
+async function routeTypedSelection(ev, to, conv, baseState) {
+  const sel = await resolveTypedSelection({
+    text: ev.text,
+    lastResults: conv.last_results,
+    getBySlug: founders.getBySlug,
+    sendCard: async (f) => {
+      const ctx = { outbox: [] };
+      pushProfile(ctx, f);
+      const results = await sendOutbox(to, ctx.outbox);
+      return results.every((r) => r.ok);
+    },
+  });
+  if (!sel.handled) return false; // not an ordinal (or stale slug) → let the LLM handle it
+
+  const hist = Array.isArray(conv.history) ? conv.history : [];
+  const draft = { ...(conv.draft || {}), intro_sent: true };
+  if (sel.sendFailed) {
+    await wa.sendText(to, "Sorry — I couldn't load that profile just now. Try again?");
+  } else {
+    hist.push({ role: 'user', content: ev.text });
+    hist.push({ role: 'assistant', content: `(internal note — already shown to the user: the profile of ${sel.founder.name})` });
+    draft.focus = fmt.focusFields(sel.founder); // ground follow-ups on real data
+    delete draft.match_cache; // viewing a profile ends the previous match list
+    delete draft.match_offset;
+  }
+  await saveConversation(to, {
+    ...baseState,
+    last_results: conv.last_results, // keep the list so "now show 3" still works
+    history: hist.slice(-10),
+    draft,
+  });
+  return true;
 }
 
 /** Returns true if the reply id was handled here. */
@@ -122,9 +172,14 @@ async function routeReply(ev, to, conv, baseState) {
     if (f) {
       const ctx = { outbox: [] };
       pushProfile(ctx, f);
-      await sendOutbox(to, ctx.outbox);
-      hist.push({ role: 'assistant', content: `(internal note — already shown to the user: the profile of ${f.name})` });
-      draft.focus = fmt.focusFields(f); // so follow-ups answer from real data
+      const results = await sendOutbox(to, ctx.outbox);
+      if (results.every((r) => r.ok)) {
+        hist.push({ role: 'assistant', content: `(internal note — already shown to the user: the profile of ${f.name})` });
+        draft.focus = fmt.focusFields(f); // so follow-ups answer from real data
+      } else {
+        // Card didn't reach the user — don't claim it did, and don't set focus.
+        await wa.sendText(to, "Sorry — I couldn't load that profile just now. Try again?");
+      }
     } else {
       await wa.sendText(to, "I couldn't find that profile anymore.");
     }
