@@ -45,7 +45,12 @@ test('common abbreviations resolve to the city', () => {
   assert.ok(expandLocation('vizag').terms.includes('visakhapatnam'));
   assert.ok(expandLocation('tvm').terms.includes('thiruvananthapuram'));
   assert.ok(expandLocation('Lko').terms.includes('lucknow'));
+  assert.ok(expandLocation('pun').terms.includes('pune'));
+  assert.ok(expandLocation('chn').terms.includes('chennai'));
+  assert.ok(expandLocation('blore').terms.includes('bengaluru'));
   assert.strictEqual(expandLocation('blr').state, 'karnataka');
+  assert.strictEqual(expandLocation('pun').state, 'maharashtra');
+  assert.strictEqual(expandLocation('chn').state, 'tamil nadu');
 });
 
 test('abbreviations are never emitted as match terms (no false substring matches)', () => {

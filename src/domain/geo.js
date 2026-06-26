@@ -95,9 +95,11 @@ const ALIAS_GROUPS = [
 // a real `city` value. Resolved to a canonical city BEFORE expansion and never
 // emitted as match terms, so they cannot cause false substring matches.
 const INPUT_ALIASES = {
-  blr: 'bengaluru', bglr: 'bengaluru',
+  blr: 'bengaluru', bglr: 'bengaluru', blore: 'bengaluru',
   hyd: 'hyderabad',
   bom: 'mumbai',
+  pun: 'pune',
+  chn: 'chennai', maa: 'chennai',
   cal: 'kolkata',
   ggn: 'gurugram',
   lko: 'lucknow',
