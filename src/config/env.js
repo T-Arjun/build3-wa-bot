@@ -42,6 +42,8 @@ const env = {
     cron: process.env.SYNC_CRON || '0 */6 * * *',
     onBoot: bool(process.env.SYNC_ON_BOOT, true),
   },
+
+  adminToken: process.env.ADMIN_TOKEN || '',
 };
 
 function get(path) {

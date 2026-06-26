@@ -7,6 +7,7 @@ const { parseInbound } = require('./whatsapp/parseInbound');
 const { alreadyProcessed } = require('./bot/idempotency');
 const { handleEvent } = require('./bot/handler');
 const { startSyncSchedule } = require('./sync/schedule');
+const adminRouter = require('./admin/routes');
 const log = require('./lib/logger');
 
 const app = express();
@@ -19,6 +20,9 @@ app.use(
     },
   }),
 );
+
+// Admin panel (conversation monitor, protected by ADMIN_TOKEN)
+app.use('/admin', adminRouter);
 
 // Coolify injects SOURCE_COMMIT at build; expose it so we can verify what's live.
 const BUILD_COMMIT =
