@@ -63,15 +63,16 @@ function sendButtons(to, body, buttons) {
 /**
  * CTA-URL message - a single button that opens `url` directly (no reply id).
  * The only interactive type that deep-links to the web; can't be combined with
- * reply buttons in the same message.
+ * reply buttons in the same message. `headerImage` (optional) renders a photo
+ * above the body, turning this into a rich card with a built-in link button.
  */
-function sendCtaUrl(to, body, displayText, url, header) {
+function sendCtaUrl(to, body, displayText, url, headerImage) {
   return send({
     to,
     type: 'interactive',
     interactive: {
       type: 'cta_url',
-      ...(header ? { header: { type: 'text', text: truncate(header, 60) } } : {}),
+      ...(headerImage ? { header: { type: 'image', image: { link: headerImage } } } : {}),
       body: { text: truncate(body, 1024) },
       footer: { text: truncate(DISCLAIMER, 60) },
       action: {

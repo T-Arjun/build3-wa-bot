@@ -17,7 +17,7 @@ async function sendOutbox(to, outbox) {
       if (m.kind === 'text') await wa.sendText(to, m.body);
       else if (m.kind === 'buttons') await wa.sendButtons(to, m.body, m.buttons);
       else if (m.kind === 'list') await wa.sendList(to, m.body, m.button, m.rows, m.header);
-      else if (m.kind === 'cta') await wa.sendCtaUrl(to, m.body, m.title, m.url, m.header);
+      else if (m.kind === 'cta') await wa.sendCtaUrl(to, m.body, m.title, m.url, m.headerImage);
       else if (m.kind === 'image') await wa.sendImage(to, m.url, m.caption);
       ok = true;
     } catch (err) {

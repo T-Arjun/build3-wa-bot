@@ -361,15 +361,18 @@ function pushSherpaList(ctx, list, body) {
 }
 
 /**
- * Push a mentor's profile card, then a "Book a slot" CTA-URL button that opens
- * their calendar DIRECTLY (one tap → web, no intermediate message), then a small
- * Prep doc / More mentors row. prep:/area: handlers live in handler.routeReply.
+ * Two messages:
+ *  1. A rich card (photo header + name/expertise/LinkedIn) whose built-in
+ *     "Book a slot" button opens the mentor's calendar DIRECTLY (one tap, no
+ *     intermediate message) - a CTA-URL message with an image header.
+ *  2. A Prep doc / More mentors button row. prep:/area: handlers live in
+ *     handler.routeReply.
  */
 function pushSherpaCard(ctx, s) {
-  ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(s), caption: fmt.sherpaCard(s) });
   ctx.outbox.push({
     kind: 'cta',
-    body: `Book a 1:1 with ${s.name}. Tap to pick a time that works.`,
+    headerImage: fmt.avatarFor(s),
+    body: fmt.sherpaCard(s),
     title: 'Book a slot',
     url: s.booking_url,
   });
