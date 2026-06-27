@@ -8,7 +8,7 @@ function sleep(ms) {
 
 /**
  * Retry an async fn on TRANSIENT failures (network blips, 429 rate limit, 5xx).
- * Non-transient errors (4xx other than 429) are re-thrown immediately — retrying
+ * Non-transient errors (4xx other than 429) are re-thrown immediately - retrying
  * a bad request never helps. Backoff is exponential from baseMs.
  *
  * @param {() => Promise<any>} fn
@@ -26,7 +26,7 @@ async function withRetry(fn, { retries = 2, baseMs = 600, label = 'op' } = {}) {
       if (!transient || attempt === retries) throw err;
       const delay = baseMs * 2 ** attempt;
       log.warn(
-        `${label} transient failure (attempt ${attempt + 1}/${retries + 1}, status ${status ?? 'n/a'}) — retrying in ${delay}ms: ${err.message}`,
+        `${label} transient failure (attempt ${attempt + 1}/${retries + 1}, status ${status ?? 'n/a'}) - retrying in ${delay}ms: ${err.message}`,
       );
       await sleep(delay);
     }

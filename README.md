@@ -1,14 +1,14 @@
 # build3-wa-bot
 
-WhatsApp bot for the build3 founders community — **founder search, profile view, and constraint-aware cofounder matching** over WhatsApp. A clean-room rebuild of the *core functions* of [build-3/founders-directory-platform](https://github.com/build-3/founders-directory-platform).
+WhatsApp bot for the build3 founders community - **founder search, profile view, and constraint-aware cofounder matching** over WhatsApp. A clean-room rebuild of the *core functions* of [build-3/founders-directory-platform](https://github.com/build-3/founders-directory-platform).
 
 > **Read-only on the source.** Founders are synced *from* the platform's public API into our own Supabase DB every 6 hours. We never write back. New WhatsApp signups (a later phase) become native Supabase rows.
 
 ## What it does (MVP)
 
-- **Search & discovery** — "find fintech founders in Bangalore" → filtered list.
-- **Profile view** — "show me Varun" → profile card with photo; asks which one if the name is ambiguous.
-- **Cofounder matching** — "find me a cofounder in fintech who can do sales" → AI extracts filters → Postgres pre-filters the pool → OpenAI scores it (the source platform's 7-factor prompt, reused) → top matches with scores + reasons.
+- **Search & discovery** - "find fintech founders in Bangalore" → filtered list.
+- **Profile view** - "show me Varun" → profile card with photo; asks which one if the name is ambiguous.
+- **Cofounder matching** - "find me a cofounder in fintech who can do sales" → AI extracts filters → Postgres pre-filters the pool → OpenAI scores it (the source platform's 7-factor prompt, reused) → top matches with scores + reasons.
 
 The conversational engine is OpenAI tool-calling. It does **AI filter extraction** (not regex) and **clarifies before acting** when input is vague or ambiguous.
 

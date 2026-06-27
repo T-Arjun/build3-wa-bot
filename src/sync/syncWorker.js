@@ -78,7 +78,7 @@ async function runSync(opts = {}) {
     }
 
     log.info(
-      `sync done — pages:${stats.pages} fetched:${stats.fetched} upserted:${stats.upserted} errors:${stats.errors.length}`,
+      `sync done - pages:${stats.pages} fetched:${stats.fetched} upserted:${stats.upserted} errors:${stats.errors.length}`,
     );
     return stats;
   } catch (err) {

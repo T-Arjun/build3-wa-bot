@@ -16,7 +16,7 @@ function graphUrl() {
 
 async function send(payload) {
   if (!env.whatsapp.token || !env.whatsapp.phoneNumberId) {
-    log.warn('WhatsApp not configured — would send:', JSON.stringify(payload).slice(0, 500));
+    log.warn('WhatsApp not configured - would send:', JSON.stringify(payload).slice(0, 500));
     return { skipped: true };
   }
   const res = await fetch(graphUrl(), {
@@ -40,7 +40,7 @@ function sendText(to, body) {
 }
 
 /**
- * Reply buttons — max 3. buttons = [{id, title}].
+ * Reply buttons - max 3. buttons = [{id, title}].
  */
 function sendButtons(to, body, buttons) {
   return send({
@@ -61,7 +61,7 @@ function sendButtons(to, body, buttons) {
 }
 
 /**
- * CTA-URL message — a single button that opens `url` directly (no reply id).
+ * CTA-URL message - a single button that opens `url` directly (no reply id).
  * The only interactive type that deep-links to the web; can't be combined with
  * reply buttons in the same message.
  */
@@ -83,7 +83,7 @@ function sendCtaUrl(to, body, displayText, url, header) {
 }
 
 /**
- * List message — up to 10 rows total. rows = [{id, title, description?}].
+ * List message - up to 10 rows total. rows = [{id, title, description?}].
  */
 function sendList(to, body, buttonLabel, rows, header) {
   return send({
@@ -122,7 +122,7 @@ function sendImage(to, imageUrl, caption) {
 }
 
 /**
- * Mark a received message as read AND show a typing indicator — in ONE call.
+ * Mark a received message as read AND show a typing indicator - in ONE call.
  *
  * The typing indicator is NOT a standalone message type. The /messages endpoint
  * rejects type:"typing_indicator" (its enum is audio/text/image/interactive/…),

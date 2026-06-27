@@ -4,7 +4,7 @@ const { env } = require('../config/env');
 
 /**
  * Read-only client for the source platform's public API.
- * We ONLY ever call GET endpoints — the source is never mutated.
+ * We ONLY ever call GET endpoints - the source is never mutated.
  */
 
 function authHeaders() {
@@ -16,7 +16,7 @@ function authHeaders() {
 
 /**
  * Fetch one page of listed (published) founders.
- * Mirrors GET /api/v1/getListedUsers — see source routes/api.js.
+ * Mirrors GET /api/v1/getListedUsers - see source routes/api.js.
  * @returns {Promise<{page:number,limit:number,total:number,totalPages:number,data:object[]}>}
  */
 async function getListedUsersPage(page = 1, limit = 200) {

@@ -47,7 +47,7 @@ function parseOrdinal(text, listLen) {
  * Deterministically resolve a typed list selection BEFORE the LLM. I/O is
  * injected (getBySlug, sendCard) so this is fully unit-testable without Supabase
  * or WhatsApp. Critically, `founder` is only returned when the card actually
- * sent — the caller must NOT commit focus/history on a failed send.
+ * sent - the caller must NOT commit focus/history on a failed send.
  *
  * @returns {Promise<{handled:boolean, sendFailed?:boolean, founder?:object}>}
  */

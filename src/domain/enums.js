@@ -3,7 +3,7 @@
 /**
  * Field enums mirrored verbatim from the source platform's models/Founder.js.
  * Reusing these keeps our data shape and the AI's filter vocabulary aligned
- * with the directory we sync from. Do not invent new values — see rules/00.
+ * with the directory we sync from. Do not invent new values - see rules/00.
  */
 
 const SECTORS = [

@@ -37,7 +37,7 @@ async function run(input) {
     messages.push({
       role: 'system',
       content:
-        'FOCUS — the founder the user is currently viewing. Answer any question about them using ONLY these facts; never invent a sector, skill, stage, or startup detail. If a field is null/empty, say you don\'t have that detail.\n' +
+        'FOCUS - the founder the user is currently viewing. Answer any question about them using ONLY these facts; never invent a sector, skill, stage, or startup detail. If a field is null/empty, say you don\'t have that detail.\n' +
         JSON.stringify(input.focus),
     });
   }
@@ -45,7 +45,7 @@ async function run(input) {
     messages.push({
       role: 'system',
       content:
-        "KNOWN ABOUT THE USER (their OWN background — use this for cofounder complementarity and do NOT ask for it again): " +
+        "KNOWN ABOUT THE USER (their OWN background - use this for cofounder complementarity and do NOT ask for it again): " +
         JSON.stringify(input.self),
     });
   }
@@ -150,7 +150,7 @@ function summarize(finalText, outbox) {
     }
   }
   const parts = [];
-  if (shown.length) parts.push(`(internal note — already shown to the user: ${shown.join('; ')})`);
+  if (shown.length) parts.push(`(internal note - already shown to the user: ${shown.join('; ')})`);
   if (finalText) parts.push(finalText);
   return parts.join(' ').slice(0, 600) || '(no reply)';
 }

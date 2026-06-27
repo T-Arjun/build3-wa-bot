@@ -158,7 +158,7 @@ function dashboardHtml(token) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>build3 — bot monitor</title>
+<title>build3 - bot monitor</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0e0e0;height:100vh;display:flex;flex-direction:column;overflow:hidden}
@@ -238,7 +238,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0
       <input type="text" id="searchInput" placeholder="Search by number or message…" oninput="renderList()">
     </div>
     <div class="sidebar-header">
-      Conversations <span class="conv-count" id="convCount">—</span>
+      Conversations <span class="conv-count" id="convCount">-</span>
     </div>
     <div class="conv-list" id="convList"></div>
   </div>
@@ -377,7 +377,7 @@ async function loadThread(waId) {
       }
       const c = m.content || '';
       if (c.startsWith('(internal note')) {
-        const note = c.replace(/^\\(internal note[^—]*— /, '').replace(/\\)$/, '');
+        const note = c.replace(/^\\(internal note[^-]*- /, '').replace(/\\)$/, '');
         return \`<div class="tool">📌 \${esc(note)}</div>\`;
       }
       return \`<div class="msg bot">
@@ -429,7 +429,7 @@ function sherpasHtml(token) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>build3 — sherpas</title>
+<title>build3 - sherpas</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0e0e0;min-height:100vh}

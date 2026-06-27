@@ -22,7 +22,7 @@ function signature(requesterSlug, filters, self) {
       skills: (filters.skills || []).map((s) => s.toLowerCase()).sort(),
     },
     // Self-description personalizes the target, so it MUST be part of the cache
-    // key — otherwise two anonymous users with the same filters but different
+    // key - otherwise two anonymous users with the same filters but different
     // backgrounds would share (wrong) cached results.
     s: self
       ? {

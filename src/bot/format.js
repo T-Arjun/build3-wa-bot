@@ -68,7 +68,7 @@ function profileCaption(f) {
   const idea = f.startup_idea ? truncate(f.startup_idea.trim(), 300) : '';
   if (f.startup_name || idea) {
     lines.push('');
-    if (f.startup_name && idea) lines.push(`*${f.startup_name}* — ${idea}`);
+    if (f.startup_name && idea) lines.push(`*${f.startup_name}* - ${idea}`);
     else lines.push(`*${f.startup_name || ''}*${idea}`.trim());
   }
 
@@ -102,7 +102,7 @@ function focusFields(f) {
 
 /** A single cofounder match block (used when sent as an image card caption). */
 function matchCaption(m) {
-  const lines = [`*${m.name}* — ${m.score}/100`];
+  const lines = [`*${m.name}* - ${m.score}/100`];
   // Lead with what they're building, then location. Sector tag is not a description.
   if (m.startup_idea) {
     const idea = truncate(m.startup_idea.trim(), 80);
@@ -147,15 +147,15 @@ function bookingMessage(s) {
     `📅 Book a 1:1 with *${s.name}*:`,
     s.booking_url,
     '',
-    `Before the call: copy & fill the prep doc, then share the link with them — ${PREP_DOC_URL}`,
-    `After the call: a 2-min feedback form — ${FEEDBACK_FORM_URL}`,
+    `Before the call: copy & fill the prep doc, then share the link with them. ${PREP_DOC_URL}`,
+    `After the call: a 2-min feedback form. ${FEEDBACK_FORM_URL}`,
   ].join('\n');
 }
 
 /** Prep-doc + feedback reminder, sent on its own (the "Prep doc" button). */
 function prepMessage() {
   return [
-    'Make a copy of the Founder Talk prep doc, fill it out, and share the editable link with your mentor before the meeting — it makes the session far more useful:',
+    'Make a copy of the Founder Talk prep doc, fill it out, and share the editable link with your mentor before the meeting - it makes the session far more useful:',
     PREP_DOC_URL,
     '',
     'After the call, please take 2 minutes to share feedback 🙏',

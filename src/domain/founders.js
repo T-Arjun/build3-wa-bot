@@ -35,7 +35,7 @@ function linkedinHandle(url) {
   if (!url) return null;
   // ONLY personal profiles (/in/...) identify a person. Company pages
   // (/company/...) are shared by everyone at the startup, so they must NOT be an
-  // identity key — otherwise two cofounders who both link their company page
+  // identity key - otherwise two cofounders who both link their company page
   // collapse into one and one of them disappears from the directory.
   const m = String(url).toLowerCase().match(/linkedin\.com\/in\/([a-z0-9\-_%.]+)/i);
   return m ? m[1].replace(/\/+$/, '') : null;
@@ -157,7 +157,7 @@ function applyFilters(q, filters = {}) {
     } else if (list.length > 1) {
       q = q.or(list.map((t) => `city.ilike.*${t}*`).join(','));
     }
-    // DEBUG=1 shows how a city/state expanded — the Kerala-returns-2 class of bug.
+    // DEBUG=1 shows how a city/state expanded - the Kerala-returns-2 class of bug.
     log.debug('city expand', JSON.stringify(filters.city), '→', JSON.stringify(list));
   }
   if (Number.isInteger(filters.cohort)) q = q.eq('cohort', filters.cohort);
@@ -167,7 +167,7 @@ function applyFilters(q, filters = {}) {
   if (Array.isArray(filters.lookingFor) && filters.lookingFor.length) {
     q = q.overlaps('looking_for', pgArray(filters.lookingFor));
   }
-  // Skills: OR semantics — a founder matching ANY listed skill is relevant.
+  // Skills: OR semantics - a founder matching ANY listed skill is relevant.
   if (Array.isArray(filters.skills) && filters.skills.length) {
     const skillTerms = filters.skills.map((t) => String(t).toLowerCase().trim()).filter(Boolean);
     if (skillTerms.length === 1) {
@@ -197,7 +197,7 @@ async function searchFounders(filters = {}, limit = 10) {
 }
 
 async function countFounders(filters = {}) {
-  // Count DISTINCT, SHOWABLE people — not raw rows — so the number always equals
+  // Count DISTINCT, SHOWABLE people - not raw rows - so the number always equals
   // what the list actually renders. Needs the content columns isShowable checks.
   let q = supabase()
     .from('founders')
@@ -221,7 +221,7 @@ async function getBySlug(slug) {
 }
 
 /**
- * Find by (partial) name — returns up to `limit` for disambiguation.
+ * Find by (partial) name - returns up to `limit` for disambiguation.
  */
 async function findByName(name, limit = 5) {
   const clean = String(name || '').trim();
@@ -262,7 +262,7 @@ async function cofounderCandidates(filters = {}, excludeSlug = null, limit = 40)
  * Fallback pool when nobody matching the filters has explicitly set cofounder
  * intent: all published founders matching the filters, EXCLUDING those who
  * explicitly opted out (looking_for contains 'none'). Founders who left
- * looking_for blank are included — blank means "unspecified", not "no".
+ * looking_for blank are included - blank means "unspecified", not "no".
  */
 async function candidatesByFilters(filters = {}, excludeSlug = null, limit = 40) {
   let q = supabase()

@@ -71,7 +71,7 @@ const definitions = [
     function: {
       name: 'set_self_profile',
       description:
-        "Record what the USER says about THEMSELVES — their OWN skills, sector, city, stage, or role — so cofounder matches are scored as complementary to them (not just filtered). Call this whenever the user reveals their own background, e.g. \"I'm a technical founder\", \"I can do sales and growth\", \"I'm building a fintech in Bangalore\". This is about the user themselves, NOT about who they are looking for.",
+        "Record what the USER says about THEMSELVES - their OWN skills, sector, city, stage, or role - so cofounder matches are scored as complementary to them (not just filtered). Call this whenever the user reveals their own background, e.g. \"I'm a technical founder\", \"I can do sales and growth\", \"I'm building a fintech in Bangalore\". This is about the user themselves, NOT about who they are looking for.",
       parameters: {
         type: 'object',
         properties: {
@@ -153,7 +153,7 @@ const SHOWN_NOTE =
   'The full profile card (photo + startup, sector, city, skills, LinkedIn) has ALREADY been sent to the user. Do NOT offer to show the profile again. Keep any text to a one-line confirmation; you may offer "similar founders".';
 
 const LIST_SHOWN_NOTE =
-  'Your text reply is sent FIRST, then the interactive list/cards appear right below it. Write a warm, helpful lead-in (1–2 short sentences, build3 tone) that frames what they are about to see and invites them to tap. Do NOT enumerate or repeat the names/items — the list already shows them; repeating them is the mistake to avoid.';
+  'Your text reply is sent FIRST, then the interactive list/cards appear right below it. Write a warm, helpful lead-in (1-2 short sentences, build3 tone) that frames what they are about to see and invites them to tap. Do NOT enumerate or repeat the names/items - the list already shows them; repeating them is the mistake to avoid.';
 
 /** Tool implementations. Each receives (args, ctx) and returns a summary object for the model. */
 const impls = {
@@ -174,7 +174,7 @@ const impls = {
     }
     ctx.outbox.push({
       kind: 'list',
-      body: `Found ${count}${count > results.length ? ` — showing ${results.length}` : ''}. Tap one to view:`,
+      body: `Found ${count}${count > results.length ? `, showing ${results.length}` : ''}. Tap one to view:`,
       button: 'View founders',
       rows: results.map(fmt.toRow),
     });
@@ -201,7 +201,7 @@ const impls = {
     }
     ctx.outbox.push({
       kind: 'list',
-      body: `I found a few — which ${args.name}?`,
+      body: `I found a few - which ${args.name}?`,
       button: 'Choose',
       rows: matches.map(fmt.toRow),
     });
@@ -213,7 +213,7 @@ const impls = {
 
   async find_cofounders(args, ctx) {
     const filters = toFilters(args);
-    // No hard "need criteria" gate — a broad search returns sensible results
+    // No hard "need criteria" gate - a broad search returns sensible results
     // (cofounder-seekers, or soft fallback). The engine clarifies at most once
     // at the conversation layer; once the user wants results, we always show some.
     const { results, poolSize, tooFew, soft } = await findCofounders(
@@ -242,7 +242,7 @@ const impls = {
         kind: 'text',
         body:
           "I didn't find anyone there who's said they're actively looking for a cofounder. " +
-          'But we do have a few founder connects from that search — they\'re not explicitly seeking, ' +
+          'But we do have a few founder connects from that search - they\'re not explicitly seeking, ' +
           'though if you like, we can help you start a conversation with them:',
       });
     }
@@ -296,10 +296,10 @@ const impls = {
         return { status: 'shown', name: matches[0].name, note: SHERPA_SHOWN_NOTE };
       }
       if (matches.length > 1) {
-        pushSherpaList(ctx, matches, 'Mentors who can help with that — tap one to view and book:');
+        pushSherpaList(ctx, matches, 'Mentors who can help with that. Tap one to view and book:');
         return { status: 'ok', shown: matches.length, note: LIST_SHOWN_NOTE };
       }
-      // No mentor literally lists that topic — don't show the area picker yet;
+      // No mentor literally lists that topic - don't show the area picker yet;
       // nudge the model to retry with the closest area so only ONE list renders.
       return {
         status: 'no_topic_match',
@@ -311,7 +311,7 @@ const impls = {
     if (args.area && AREA_KEYS.includes(args.area)) {
       const list = await sherpas.listByArea(args.area);
       if (!list.length) return { status: 'none', area: args.area };
-      pushSherpaList(ctx, list, `Mentors for ${areaLabel(args.area)} — tap one to view and book:`);
+      pushSherpaList(ctx, list, `Mentors for ${areaLabel(args.area)}. Tap one to view and book:`);
       return { status: 'ok', area: args.area, shown: list.length, note: LIST_SHOWN_NOTE };
     }
     // Default: show the area picker.
@@ -327,7 +327,7 @@ const impls = {
 };
 
 const SHERPA_SHOWN_NOTE =
-  "Your text reply is sent FIRST, then the mentor's card, a 'Book a slot' button that opens their calendar directly, and a Prep doc / More mentors row appear right below it. Open with a warm, helpful lead-in (1–2 short sentences, build3 tone): affirm it's a solid pick and tell them to tap Book a slot to pick a time. Do NOT repeat the mentor's details or list other mentors.";
+  "Your text reply is sent FIRST, then the mentor's card, a 'Book a slot' button that opens their calendar directly, and a Prep doc / More mentors row appear right below it. Open with a warm, helpful lead-in (1-2 short sentences, build3 tone): affirm it's a solid pick and tell them to tap Book a slot to pick a time. Do NOT repeat the mentor's details or list other mentors.";
 
 function pushProfile(ctx, f) {
   ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(f), caption: fmt.profileCaption(f) });
@@ -343,7 +343,7 @@ async function showAreas(ctx) {
     button: 'Choose an area',
     rows: areas.map(fmt.areaRow),
   });
-  ctx.state.last_results = []; // not a founder list — disable founder ordinal pick
+  ctx.state.last_results = []; // not a founder list - disable founder ordinal pick
   return { status: 'areas', count: areas.length, note: LIST_SHOWN_NOTE };
 }
 
@@ -369,7 +369,7 @@ function pushSherpaCard(ctx, s) {
   ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(s), caption: fmt.sherpaCard(s) });
   ctx.outbox.push({
     kind: 'cta',
-    body: `Book a 1:1 with ${s.name} — tap to pick a time that works.`,
+    body: `Book a 1:1 with ${s.name}. Tap to pick a time that works.`,
     title: 'Book a slot',
     url: s.booking_url,
   });

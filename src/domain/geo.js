@@ -29,7 +29,7 @@ function normalize(s) {
 }
 
 /**
- * Optimal string alignment (Damerau–Levenshtein) edit distance. Counts an
+ * Optimal string alignment (Damerau-Levenshtein) edit distance. Counts an
  * adjacent transposition as a single edit, so common typos ("mumabi"→"mumbai")
  * resolve at distance 1.
  */
@@ -281,7 +281,7 @@ const CITY_STATE = {
 // Only high-value, low-collision codes + descriptive variant spellings. Two-letter
 // codes that are common English words or non-Indian places (uk=United Kingdom,
 // or/as=English words, ga=Georgia, hr=HR, br=Brazil, ar=Arkansas, plus the rarely
-// typed NE codes) are deliberately omitted — the full state name still resolves.
+// typed NE codes) are deliberately omitted - the full state name still resolves.
 const STATE_ALIASES = {
   ap: 'andhra pradesh',
   cg: 'chhattisgarh', chattisgarh: 'chhattisgarh',

@@ -23,7 +23,7 @@ const MATCH_PAGE = 3;
 async function handleEvent(ev) {
   const to = ev.waId;
 
-  // Acknowledge immediately — blue ticks + typing bubble (one combined call)
+  // Acknowledge immediately - blue ticks + typing bubble (one combined call)
   // before any async work, so it lands within ~50ms of the message arriving.
   if (ev.messageId) wa.markRead(ev.messageId);
 
@@ -32,7 +32,7 @@ async function handleEvent(ev) {
   if (!env.supabase.url || !env.supabase.serviceKey) {
     await wa.sendText(
       to,
-      "👋 Hi! build3 bot is online — I'm in final setup right now. Founder search and cofounder matching go live very soon. Message me again shortly!",
+      "👋 Hi! build3 bot is online. I'm in final setup right now. Founder search and cofounder matching go live very soon. Message me again shortly!",
     );
     return;
   }
@@ -51,13 +51,13 @@ async function handleEvent(ev) {
     if (handled) return;
   }
 
-  // 1.4) Typed selection over a mentor list ("2", "the first one") — pre-LLM.
+  // 1.4) Typed selection over a mentor list ("2", "the first one") - pre-LLM.
   if (ev.text && Array.isArray(conv.draft?.sherpa_results) && conv.draft.sherpa_results.length) {
     const handled = await routeSherpaTypedSelection(ev, to, conv, baseState);
     if (handled) return;
   }
 
-  // 1.5) Typed list selection ("2", "show the first one") — deterministic, pre-LLM.
+  // 1.5) Typed list selection ("2", "show the first one") - deterministic, pre-LLM.
   // Goes slug → getBySlug, bypassing the brittle name lookup, and commits focus
   // ONLY if the card actually sent.
   if (ev.text && Array.isArray(conv.last_results) && conv.last_results.length) {
@@ -104,7 +104,7 @@ async function handleEvent(ev) {
     });
   } catch (err) {
     log.error('handleEvent engine error:', err.message);
-    await wa.sendText(to, "Sorry — something went wrong on my side. Try again in a moment.");
+    await wa.sendText(to, "Sorry, something went wrong on my side. Try again in a moment.");
   }
 }
 
@@ -119,14 +119,14 @@ function persistDraft(conv, state, sendsOk = true) {
     draft.match_offset = MATCH_PAGE;
   }
   if (state.focus && sendsOk) {
-    // New profile viewed this turn AND its card actually sent — update FOCUS and
+    // New profile viewed this turn AND its card actually sent - update FOCUS and
     // clear stale match context. If the send failed, do NOT point focus at a card
     // the user never saw (their follow-ups would get confidently-wrong facts).
     draft.focus = state.focus;
     delete draft.match_cache;
     delete draft.match_offset;
   } else if (state.topic_changed) {
-    // search_founders or find_cofounders was called — user moved on, stale FOCUS is wrong.
+    // search_founders or find_cofounders was called - user moved on, stale FOCUS is wrong.
     delete draft.focus;
   }
   // Mentor list shown this turn → remember slugs for a typed ("2") pick. A founder
@@ -157,10 +157,10 @@ async function routeTypedSelection(ev, to, conv, baseState) {
   const hist = Array.isArray(conv.history) ? conv.history : [];
   const draft = { ...(conv.draft || {}), intro_sent: true };
   if (sel.sendFailed) {
-    await wa.sendText(to, "Sorry — I couldn't load that profile just now. Try again?");
+    await wa.sendText(to, "Sorry, I couldn't load that profile just now. Try again?");
   } else {
     hist.push({ role: 'user', content: ev.text });
-    hist.push({ role: 'assistant', content: `(internal note — already shown to the user: the profile of ${sel.founder.name})` });
+    hist.push({ role: 'assistant', content: `(internal note - already shown to the user: the profile of ${sel.founder.name})` });
     draft.focus = fmt.focusFields(sel.founder); // ground follow-ups on real data
     delete draft.match_cache; // viewing a profile ends the previous match list
     delete draft.match_offset;
@@ -188,11 +188,11 @@ async function routeReply(ev, to, conv, baseState) {
       pushProfile(ctx, f);
       const results = await sendOutbox(to, ctx.outbox);
       if (results.every((r) => r.ok)) {
-        hist.push({ role: 'assistant', content: `(internal note — already shown to the user: the profile of ${f.name})` });
+        hist.push({ role: 'assistant', content: `(internal note - already shown to the user: the profile of ${f.name})` });
         draft.focus = fmt.focusFields(f); // so follow-ups answer from real data
       } else {
-        // Card didn't reach the user — don't claim it did, and don't set focus.
-        await wa.sendText(to, "Sorry — I couldn't load that profile just now. Try again?");
+        // Card didn't reach the user - don't claim it did, and don't set focus.
+        await wa.sendText(to, "Sorry, I couldn't load that profile just now. Try again?");
       }
     } else {
       await wa.sendText(to, "I couldn't find that profile anymore.");
@@ -236,13 +236,13 @@ async function routeReply(ev, to, conv, baseState) {
     const list = await sherpas.listByArea(key);
     const draft = { ...(conv.draft || {}), intro_sent: true };
     if (!list.length) {
-      await wa.sendText(to, 'No mentors in that area right now — try another?');
+      await wa.sendText(to, 'No mentors in that area right now. Try another?');
     } else {
       await sendOutbox(to, [
         {
           kind: 'list',
           header: 'Mentor Hours',
-          body: `Mentors for ${areaLabel(key)} — tap one to view and book:`,
+          body: `Mentors for ${areaLabel(key)}. Tap one to view and book:`,
           button: 'View mentor',
           rows: list.map(fmt.sherpaRow),
         },
@@ -262,7 +262,7 @@ async function routeReply(ev, to, conv, baseState) {
       pushSherpaCard(ctx, s);
       const results = await sendOutbox(to, ctx.outbox);
       if (!results.every((r) => r.ok)) {
-        await wa.sendText(to, "Sorry — I couldn't load that mentor just now. Try again?");
+        await wa.sendText(to, "Sorry, I couldn't load that mentor just now. Try again?");
       }
     } else {
       await wa.sendText(to, "I couldn't find that mentor anymore.");
@@ -310,12 +310,12 @@ async function routeSherpaTypedSelection(ev, to, conv, baseState) {
   const hist = Array.isArray(conv.history) ? conv.history : [];
   const draft = { ...(conv.draft || {}), intro_sent: true };
   if (sel.sendFailed) {
-    await wa.sendText(to, "Sorry — I couldn't load that mentor just now. Try again?");
+    await wa.sendText(to, "Sorry, I couldn't load that mentor just now. Try again?");
   } else {
     hist.push({ role: 'user', content: ev.text });
     hist.push({
       role: 'assistant',
-      content: `(internal note — already shown to the user: the mentor card for ${sel.founder.name})`,
+      content: `(internal note - already shown to the user: the mentor card for ${sel.founder.name})`,
     });
   }
   await saveConversation(to, { ...baseState, history: hist.slice(-10), draft });

@@ -14,7 +14,7 @@ function startSyncSchedule() {
 
   async function safeRun(reason) {
     if (running) {
-      log.warn(`sync skipped (${reason}) — previous run still in progress`);
+      log.warn(`sync skipped (${reason}) - previous run still in progress`);
       return;
     }
     running = true;
@@ -28,7 +28,7 @@ function startSyncSchedule() {
   }
 
   if (!cron.validate(env.sync.cron)) {
-    log.error(`invalid SYNC_CRON "${env.sync.cron}" — sync schedule not started`);
+    log.error(`invalid SYNC_CRON "${env.sync.cron}" - sync schedule not started`);
     return;
   }
 

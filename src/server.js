@@ -80,13 +80,13 @@ const server = app.listen(env.port, () => {
   ]);
   if (!env.whatsapp.appSecret && env.nodeEnv === 'production' && !env.whatsapp.allowUnsigned) {
     log.error(
-      'SECURITY: WHATSAPP_APP_SECRET is not set — inbound webhooks will be REJECTED. Set it in the environment to bring the bot online.',
+      'SECURITY: WHATSAPP_APP_SECRET is not set - inbound webhooks will be REJECTED. Set it in the environment to bring the bot online.',
     );
   }
   if (env.supabase.url && env.source.apiBase) {
     startSyncSchedule();
   } else {
-    log.warn('sync schedule not started — Supabase/source not configured');
+    log.warn('sync schedule not started - Supabase/source not configured');
   }
 });
 

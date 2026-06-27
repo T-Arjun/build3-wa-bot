@@ -8,7 +8,7 @@
  * editable from /admin, the table is the source of truth.
  *
  * Booking links are external (each mentor owns their own calendar). LinkedIn is
- * null where the program page only had a placeholder — build3 to supply real
+ * null where the program page only had a placeholder - build3 to supply real
  * URLs; the card simply omits the line when null.
  */
 
@@ -96,7 +96,7 @@ const SHERPAS = [
   {
     slug: 'aseem-gautam',
     name: 'Aseem Gautam',
-    expertise: 'CTO, tech, product — building your v1',
+    expertise: 'CTO, tech, product - building your v1',
     areas: ['tech', 'product'],
     booking_url: 'https://cal.com/stackway/building-your-v1',
     booking_platform: 'calcom',
