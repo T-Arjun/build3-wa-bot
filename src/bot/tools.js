@@ -152,6 +152,9 @@ function hasAnyFilter(f) {
 const SHOWN_NOTE =
   'The full profile card (photo + startup, sector, city, skills, LinkedIn) has ALREADY been sent to the user. Do NOT offer to show the profile again. Keep any text to a one-line confirmation; you may offer "similar founders".';
 
+const LIST_SHOWN_NOTE =
+  'The interactive list (with a "tap to view" prompt) has ALREADY been shown to the user. Do NOT re-list or repeat the names in your reply — that is redundant. Reply with nothing, or at most a short one-line lead-in (no names).';
+
 /** Tool implementations. Each receives (args, ctx) and returns a summary object for the model. */
 const impls = {
   async search_founders(args, ctx) {
@@ -177,7 +180,7 @@ const impls = {
     });
     ctx.state.last_results = results.map((f) => f.source_slug);
     ctx.state.topic_changed = true;
-    return { status: 'ok', count, shown: results.length, names: results.map((f) => f.name) };
+    return { status: 'ok', count, shown: results.length, note: LIST_SHOWN_NOTE };
   },
 
   async get_profile(args, ctx) {
@@ -263,8 +266,8 @@ const impls = {
       soft,
       shown: top.length,
       total: fresh.length,
-      top: top.map((m) => `${m.name} (${m.score})`),
       tooFew: fresh.length < 3,
+      note: LIST_SHOWN_NOTE,
     };
   },
 
@@ -294,7 +297,7 @@ const impls = {
       }
       if (matches.length > 1) {
         pushSherpaList(ctx, matches, 'Mentors who can help with that — tap one to view and book:');
-        return { status: 'ok', shown: matches.length, names: matches.map((s) => s.name) };
+        return { status: 'ok', shown: matches.length, note: LIST_SHOWN_NOTE };
       }
       // No mentor literally lists that topic — don't show the area picker yet;
       // nudge the model to retry with the closest area so only ONE list renders.
@@ -309,7 +312,7 @@ const impls = {
       const list = await sherpas.listByArea(args.area);
       if (!list.length) return { status: 'none', area: args.area };
       pushSherpaList(ctx, list, `Mentors for ${areaLabel(args.area)} — tap one to view and book:`);
-      return { status: 'ok', area: args.area, shown: list.length, names: list.map((s) => s.name) };
+      return { status: 'ok', area: args.area, shown: list.length, note: LIST_SHOWN_NOTE };
     }
     // Default: show the area picker.
     return showAreas(ctx);
@@ -324,7 +327,7 @@ const impls = {
 };
 
 const SHERPA_SHOWN_NOTE =
-  "The mentor's card and the Book a slot / Prep doc / More mentors buttons have ALREADY been sent. Keep your text to a one-line lead-in. Remind them ONCE to fill the prep doc before and the feedback form after — do not repeat the booking link in text.";
+  "The mentor's card AND a message with their booking link + the prep-doc and feedback reminders have ALREADY been sent to the user. Reply with AT MOST one short line. Do NOT repeat the booking link, the reminders, or the mentor's details, and do NOT list other mentors.";
 
 function pushProfile(ctx, f) {
   ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(f), caption: fmt.profileCaption(f) });
@@ -341,7 +344,7 @@ async function showAreas(ctx) {
     rows: areas.map(fmt.areaRow),
   });
   ctx.state.last_results = []; // not a founder list — disable founder ordinal pick
-  return { status: 'areas', count: areas.length, areas: areas.map((a) => a.key) };
+  return { status: 'areas', count: areas.length, note: LIST_SHOWN_NOTE };
 }
 
 /** Push a list of mentors and remember their slugs for a typed ("2") selection. */
@@ -357,17 +360,18 @@ function pushSherpaList(ctx, list, body) {
   ctx.state.sherpa_results = list.map((s) => s.slug);
 }
 
-/** Push a mentor's profile card + the book/prep/more action buttons. */
+/**
+ * Push a mentor's profile card, then the booking link itself (with the prep-doc
+ * + feedback reminders) directly — no "Book a slot" tap in between. A single
+ * "More mentors" button follows for navigation (context first, option after).
+ */
 function pushSherpaCard(ctx, s) {
   ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(s), caption: fmt.sherpaCard(s) });
+  ctx.outbox.push({ kind: 'text', body: fmt.bookingMessage(s) });
   ctx.outbox.push({
     kind: 'buttons',
-    body: `Book a 1:1 with ${s.name}?`,
-    buttons: [
-      { id: `book:${s.slug}`, title: 'Book a slot' },
-      { id: `prep:${s.slug}`, title: 'Prep doc' },
-      { id: `area:${(s.areas && s.areas[0]) || 'gtm'}`, title: 'More mentors' },
-    ],
+    body: 'Need a different mentor?',
+    buttons: [{ id: `area:${(s.areas && s.areas[0]) || 'gtm'}`, title: 'More mentors' }],
   });
 }
 
