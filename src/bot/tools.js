@@ -327,7 +327,7 @@ const impls = {
 };
 
 const SHERPA_SHOWN_NOTE =
-  "Your text reply is sent FIRST, then the mentor's card and three buttons — Book a slot, Prep doc, More mentors — appear right below it. Open with a warm, helpful lead-in (1–2 short sentences, build3 tone): affirm it's a solid pick for what they need and tell them to tap Book a slot to grab a time. Do NOT repeat the mentor's details or list other mentors.";
+  "Your text reply is sent FIRST, then the mentor's card, a 'Book a slot' button that opens their calendar directly, and a Prep doc / More mentors row appear right below it. Open with a warm, helpful lead-in (1–2 short sentences, build3 tone): affirm it's a solid pick and tell them to tap Book a slot to pick a time. Do NOT repeat the mentor's details or list other mentors.";
 
 function pushProfile(ctx, f) {
   ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(f), caption: fmt.profileCaption(f) });
@@ -361,17 +361,22 @@ function pushSherpaList(ctx, list, body) {
 }
 
 /**
- * Push a mentor's profile card, then three reply buttons:
- * Book a slot (→ booking link), Prep doc (→ prep template), More mentors (→ area).
- * The tap handlers live in handler.routeReply (book:/prep:/area:).
+ * Push a mentor's profile card, then a "Book a slot" CTA-URL button that opens
+ * their calendar DIRECTLY (one tap → web, no intermediate message), then a small
+ * Prep doc / More mentors row. prep:/area: handlers live in handler.routeReply.
  */
 function pushSherpaCard(ctx, s) {
   ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(s), caption: fmt.sherpaCard(s) });
   ctx.outbox.push({
+    kind: 'cta',
+    body: `Book a 1:1 with ${s.name} — tap to pick a time that works.`,
+    title: 'Book a slot',
+    url: s.booking_url,
+  });
+  ctx.outbox.push({
     kind: 'buttons',
-    body: `Book a 1:1 with ${s.name}?`,
+    body: 'Grab the prep doc before your call, or see other mentors 👇',
     buttons: [
-      { id: `book:${s.slug}`, title: 'Book a slot' },
       { id: `prep:${s.slug}`, title: 'Prep doc' },
       { id: `area:${(s.areas && s.areas[0]) || 'gtm'}`, title: 'More mentors' },
     ],

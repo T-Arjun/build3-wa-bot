@@ -152,11 +152,14 @@ function bookingMessage(s) {
   ].join('\n');
 }
 
-/** Prep-doc reminder, sent on its own (e.g. the "Prep doc" button). */
+/** Prep-doc + feedback reminder, sent on its own (the "Prep doc" button). */
 function prepMessage() {
   return [
     'Make a copy of the Founder Talk prep doc, fill it out, and share the editable link with your mentor before the meeting — it makes the session far more useful:',
     PREP_DOC_URL,
+    '',
+    'After the call, please take 2 minutes to share feedback 🙏',
+    FEEDBACK_FORM_URL,
   ].join('\n');
 }
 

@@ -143,6 +143,8 @@ function summarize(finalText, outbox) {
       shown.push(`the profile of ${String(m.caption || '').split('\n')[0].replace(/\*/g, '').trim()}`);
     } else if (m.kind === 'buttons') {
       shown.push('a follow-up prompt');
+    } else if (m.kind === 'cta') {
+      shown.push('a booking link');
     } else if (m.kind === 'text') {
       shown.push(m.body);
     }

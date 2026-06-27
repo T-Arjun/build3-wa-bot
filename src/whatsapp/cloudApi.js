@@ -61,6 +61,28 @@ function sendButtons(to, body, buttons) {
 }
 
 /**
+ * CTA-URL message — a single button that opens `url` directly (no reply id).
+ * The only interactive type that deep-links to the web; can't be combined with
+ * reply buttons in the same message.
+ */
+function sendCtaUrl(to, body, displayText, url, header) {
+  return send({
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'cta_url',
+      ...(header ? { header: { type: 'text', text: truncate(header, 60) } } : {}),
+      body: { text: truncate(body, 1024) },
+      footer: { text: truncate(DISCLAIMER, 60) },
+      action: {
+        name: 'cta_url',
+        parameters: { display_text: truncate(displayText || 'Open', 20), url },
+      },
+    },
+  });
+}
+
+/**
  * List message — up to 10 rows total. rows = [{id, title, description?}].
  */
 function sendList(to, body, buttonLabel, rows, header) {
@@ -127,4 +149,4 @@ function truncate(s, n) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
-module.exports = { send, sendText, sendButtons, sendList, sendImage, markRead };
+module.exports = { send, sendText, sendButtons, sendList, sendCtaUrl, sendImage, markRead };
