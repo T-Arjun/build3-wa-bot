@@ -84,9 +84,11 @@ async function handleEvent(ev) {
       prevMatchSlugs: (conv.draft?.match_cache || []).map((m) => m.slug),
     });
 
+    // Conversation FIRST, then the list/cards/links below it. The model has
+    // already seen the tool result, so its lead-in frames what's about to appear.
+    if (finalText) await wa.sendText(to, finalText);
     const sendResults = await sendOutbox(to, outbox);
     const allSent = sendResults.every((r) => r.ok);
-    if (finalText) await wa.sendText(to, finalText);
 
     const newHistory = [
       ...history,

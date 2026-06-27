@@ -153,7 +153,7 @@ const SHOWN_NOTE =
   'The full profile card (photo + startup, sector, city, skills, LinkedIn) has ALREADY been sent to the user. Do NOT offer to show the profile again. Keep any text to a one-line confirmation; you may offer "similar founders".';
 
 const LIST_SHOWN_NOTE =
-  'The interactive list (with a "tap to view" prompt) has ALREADY been shown to the user. Do NOT re-list or repeat the names in your reply — that is redundant. Reply with nothing, or at most a short one-line lead-in (no names).';
+  'Your text reply is sent FIRST, then the interactive list/cards appear right below it. Write a warm, helpful lead-in (1–2 short sentences, build3 tone) that frames what they are about to see and invites them to tap. Do NOT enumerate or repeat the names/items — the list already shows them; repeating them is the mistake to avoid.';
 
 /** Tool implementations. Each receives (args, ctx) and returns a summary object for the model. */
 const impls = {
@@ -327,7 +327,7 @@ const impls = {
 };
 
 const SHERPA_SHOWN_NOTE =
-  "The mentor's card AND a message with their booking link + the prep-doc and feedback reminders have ALREADY been sent to the user. Reply with AT MOST one short line. Do NOT repeat the booking link, the reminders, or the mentor's details, and do NOT list other mentors.";
+  "Your text reply is sent FIRST, then the mentor's card and a message with their booking link + prep/feedback reminders appear right below it. Open with a warm, helpful lead-in (1–2 short sentences, build3 tone): affirm it's a solid pick for what they need and point them to the booking link below. Do NOT repeat the link, the reminders, the mentor's details, or list other mentors.";
 
 function pushProfile(ctx, f) {
   ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(f), caption: fmt.profileCaption(f) });
