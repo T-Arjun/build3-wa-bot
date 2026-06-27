@@ -53,6 +53,12 @@ test('matchByExpertise ranks topical mentors and ignores short tokens', () => {
   assert.strictEqual(matchByExpertise(SHERPAS, 'go').length, 0);
 });
 
+test('matchByExpertise resolves an explicit booking by name (top-ranked)', () => {
+  const byName = matchByExpertise(SHERPAS, 'book varun chawla');
+  assert.strictEqual(byName[0].slug, 'varun-chawla'); // name hit outranks topic hits
+  assert.ok(matchByExpertise(SHERPAS, 'ashmita').some((s) => s.slug === 'ashmita-dutta'));
+});
+
 test('sherpaRow / areaRow produce valid WhatsApp list rows', () => {
   const row = fmt.sherpaRow(SHERPAS[0]);
   assert.strictEqual(row.id, `sherpa:${SHERPAS[0].slug}`);

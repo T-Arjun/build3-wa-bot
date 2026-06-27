@@ -65,9 +65,10 @@ function filterByArea(sherpas, areaKey) {
 }
 
 /**
- * Loose expertise search for free-text ("who can help with pricing?") and the
- * proactive path. Scores each sherpa by how many query tokens appear in their
- * expertise blurb or area labels; returns matches best-first.
+ * Loose search for free-text ("who can help with pricing?"), the proactive path,
+ * AND explicit by-name booking ("book varun"). Scores each sherpa by how many
+ * query tokens appear in their NAME, expertise blurb, or area labels; a name hit
+ * weighs more so "book varun" resolves to that mentor. Returns matches best-first.
  */
 function matchByExpertise(sherpas, text) {
   const tokens = String(text || '')
@@ -77,8 +78,12 @@ function matchByExpertise(sherpas, text) {
   if (!tokens.length) return [];
   const scored = sherpas
     .map((s) => {
+      const name = String(s.name || '').toLowerCase();
       const hay = `${s.expertise} ${(s.areas || []).map(areaLabel).join(' ')} ${(s.areas || []).join(' ')}`.toLowerCase();
-      const score = tokens.reduce((n, t) => (hay.includes(t) ? n + 1 : n), 0);
+      const score = tokens.reduce(
+        (n, t) => n + (name.includes(t) ? 2 : 0) + (hay.includes(t) ? 1 : 0),
+        0,
+      );
       return { s, score };
     })
     .filter((x) => x.score > 0)
