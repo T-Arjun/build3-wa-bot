@@ -2,8 +2,10 @@
 
 const founders = require('../domain/founders');
 const { findCofounders } = require('../domain/matching');
+const sherpas = require('../domain/sherpas');
 const fmt = require('./format');
 const { SECTORS, STARTUP_STAGES, LOOKING_FOR } = require('../domain/enums');
+const { AREA_KEYS, areaLabel } = require('../domain/sherpaAreas');
 
 const TOO_BROAD = 50;
 
@@ -78,6 +80,40 @@ const definitions = [
           city: { type: 'string' },
           stage: { type: 'string', enum: STARTUP_STAGES },
           role: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_sherpas',
+      description:
+        'Browse build3 mentors ("Sherpas") to book free 1:1 mentor hours. Call with NO args to show the expertise areas; with `area` to list mentors in one area; with `query` to surface mentors for a topic the founder needs help with (e.g. "pricing", "hiring", "fundraising").',
+      parameters: {
+        type: 'object',
+        properties: {
+          area: { type: 'string', enum: AREA_KEYS, description: 'expertise area to list mentors for' },
+          query: {
+            type: 'string',
+            description: 'free-text topic the founder needs help with',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_sherpa',
+      description:
+        "Show one mentor's profile card with their booking link and the prep-doc / feedback reminders. Use the slug from a list_sherpas result.",
+      parameters: {
+        type: 'object',
+        properties: {
+          slug: { type: 'string' },
         },
         additionalProperties: false,
       },
@@ -247,10 +283,92 @@ const impls = {
       note: 'Saved their background. If they were after a cofounder, call find_cofounders now so matches are personalized to them. Do not ask for this info again.',
     };
   },
+
+  async list_sherpas(args, ctx) {
+    // Topic search: "who can help with pricing?" / proactive suggestion path.
+    if (args.query && !args.area) {
+      const matches = await sherpas.searchByExpertise(args.query);
+      if (matches.length === 1) {
+        pushSherpaCard(ctx, matches[0]);
+        return { status: 'shown', name: matches[0].name, note: SHERPA_SHOWN_NOTE };
+      }
+      if (matches.length > 1) {
+        pushSherpaList(ctx, matches, 'Mentors who can help with that — tap one to view and book:');
+        return { status: 'ok', shown: matches.length, names: matches.map((s) => s.name) };
+      }
+      // No mentor literally lists that topic — don't show the area picker yet;
+      // nudge the model to retry with the closest area so only ONE list renders.
+      return {
+        status: 'no_topic_match',
+        note: 'No mentor explicitly lists that topic. Call list_sherpas again with the closest `area` from the enum; do not reply to the user yet.',
+        areas: AREA_KEYS,
+      };
+    }
+    // Area chosen.
+    if (args.area && AREA_KEYS.includes(args.area)) {
+      const list = await sherpas.listByArea(args.area);
+      if (!list.length) return { status: 'none', area: args.area };
+      pushSherpaList(ctx, list, `Mentors for ${areaLabel(args.area)} — tap one to view and book:`);
+      return { status: 'ok', area: args.area, shown: list.length, names: list.map((s) => s.name) };
+    }
+    // Default: show the area picker.
+    return showAreas(ctx);
+  },
+
+  async get_sherpa(args, ctx) {
+    const s = await sherpas.getBySlug(args.slug);
+    if (!s) return { status: 'none' };
+    pushSherpaCard(ctx, s);
+    return { status: 'shown', name: s.name, booking_url: s.booking_url, note: SHERPA_SHOWN_NOTE };
+  },
 };
+
+const SHERPA_SHOWN_NOTE =
+  "The mentor's card and the Book a slot / Prep doc / More mentors buttons have ALREADY been sent. Keep your text to a one-line lead-in. Remind them ONCE to fill the prep doc before and the feedback form after — do not repeat the booking link in text.";
 
 function pushProfile(ctx, f) {
   ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(f), caption: fmt.profileCaption(f) });
 }
 
-module.exports = { definitions, impls, pushProfile, hasAnyFilter, toFilters };
+/** Push the expertise-area picker list. */
+async function showAreas(ctx) {
+  const areas = await sherpas.listAreas();
+  ctx.outbox.push({
+    kind: 'list',
+    header: 'Mentor Hours',
+    body: 'Book free 1:1 mentor hours with a build3 Sherpa. Pick an area to see who can help:',
+    button: 'Choose an area',
+    rows: areas.map(fmt.areaRow),
+  });
+  ctx.state.last_results = []; // not a founder list — disable founder ordinal pick
+  return { status: 'areas', count: areas.length, areas: areas.map((a) => a.key) };
+}
+
+/** Push a list of mentors and remember their slugs for a typed ("2") selection. */
+function pushSherpaList(ctx, list, body) {
+  ctx.outbox.push({
+    kind: 'list',
+    header: 'Mentor Hours',
+    body,
+    button: 'View mentor',
+    rows: list.map(fmt.sherpaRow),
+  });
+  ctx.state.last_results = []; // not a founder list
+  ctx.state.sherpa_results = list.map((s) => s.slug);
+}
+
+/** Push a mentor's profile card + the book/prep/more action buttons. */
+function pushSherpaCard(ctx, s) {
+  ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(s), caption: fmt.sherpaCard(s) });
+  ctx.outbox.push({
+    kind: 'buttons',
+    body: `Book a 1:1 with ${s.name}?`,
+    buttons: [
+      { id: `book:${s.slug}`, title: 'Book a slot' },
+      { id: `prep:${s.slug}`, title: 'Prep doc' },
+      { id: `area:${(s.areas && s.areas[0]) || 'gtm'}`, title: 'More mentors' },
+    ],
+  });
+}
+
+module.exports = { definitions, impls, pushProfile, pushSherpaCard, hasAnyFilter, toFilters };

@@ -3,10 +3,12 @@
 const { env } = require('../config/env');
 const engine = require('./engine');
 const founders = require('../domain/founders');
+const sherpas = require('../domain/sherpas');
 const { getConversation, saveConversation } = require('./conversation');
 const { sendOutbox } = require('./sendOutbox');
 const { resolveTypedSelection } = require('./ordinal');
-const { pushProfile } = require('./tools');
+const { pushProfile, pushSherpaCard } = require('./tools');
+const { areaLabel } = require('../domain/sherpaAreas');
 const fmt = require('./format');
 const wa = require('../whatsapp/cloudApi');
 const { INTRO } = require('../lib/constants');
@@ -46,6 +48,12 @@ async function handleEvent(ev) {
   // 1) Interactive reply routing (deterministic, no LLM).
   if (ev.replyId) {
     const handled = await routeReply(ev, to, conv, baseState);
+    if (handled) return;
+  }
+
+  // 1.4) Typed selection over a mentor list ("2", "the first one") — pre-LLM.
+  if (ev.text && Array.isArray(conv.draft?.sherpa_results) && conv.draft.sherpa_results.length) {
+    const handled = await routeSherpaTypedSelection(ev, to, conv, baseState);
     if (handled) return;
   }
 
@@ -119,6 +127,10 @@ function persistDraft(conv, state, sendsOk = true) {
     // search_founders or find_cofounders was called — user moved on, stale FOCUS is wrong.
     delete draft.focus;
   }
+  // Mentor list shown this turn → remember slugs for a typed ("2") pick. A founder
+  // search/match (topic_changed) or a viewed founder profile ends the mentor list.
+  if (state.sherpa_results) draft.sherpa_results = state.sherpa_results;
+  else if (state.topic_changed || (state.focus && sendsOk)) delete draft.sherpa_results;
   return draft;
 }
 
@@ -216,7 +228,96 @@ async function routeReply(ev, to, conv, baseState) {
     return true;
   }
 
+  // ─── Mentor (Sherpa) hours ─────────────────────────────────────────────────
+  if (id.startsWith('area:')) {
+    const key = id.slice('area:'.length);
+    const list = await sherpas.listByArea(key);
+    const draft = { ...(conv.draft || {}), intro_sent: true };
+    if (!list.length) {
+      await wa.sendText(to, 'No mentors in that area right now — try another?');
+    } else {
+      await sendOutbox(to, [
+        {
+          kind: 'list',
+          header: 'Mentor Hours',
+          body: `Mentors for ${areaLabel(key)} — tap one to view and book:`,
+          button: 'View mentor',
+          rows: list.map(fmt.sherpaRow),
+        },
+      ]);
+      draft.sherpa_results = list.map((s) => s.slug);
+    }
+    await saveConversation(to, { ...baseState, last_results: [], draft });
+    return true;
+  }
+
+  if (id.startsWith('sherpa:')) {
+    const slug = id.slice('sherpa:'.length);
+    const s = await sherpas.getBySlug(slug);
+    const draft = { ...(conv.draft || {}), intro_sent: true };
+    if (s) {
+      const ctx = { outbox: [], state: {} };
+      pushSherpaCard(ctx, s);
+      const results = await sendOutbox(to, ctx.outbox);
+      if (!results.every((r) => r.ok)) {
+        await wa.sendText(to, "Sorry — I couldn't load that mentor just now. Try again?");
+      }
+    } else {
+      await wa.sendText(to, "I couldn't find that mentor anymore.");
+    }
+    await saveConversation(to, { ...baseState, draft });
+    return true;
+  }
+
+  if (id.startsWith('book:')) {
+    const slug = id.slice('book:'.length);
+    const s = await sherpas.getBySlug(slug);
+    await wa.sendText(to, s ? fmt.bookingMessage(s) : "I couldn't find that mentor anymore.");
+    await saveConversation(to, { ...baseState, draft: { ...(conv.draft || {}), intro_sent: true } });
+    return true;
+  }
+
+  if (id.startsWith('prep:')) {
+    await wa.sendText(to, fmt.prepMessage());
+    await saveConversation(to, { ...baseState, draft: { ...(conv.draft || {}), intro_sent: true } });
+    return true;
+  }
+
   return false; // not an id we own → fall through to the engine
+}
+
+/**
+ * Handle a typed selection ("2", "the first one") over a mentor list shown last
+ * turn. Mirrors routeTypedSelection but resolves against sherpa slugs and sends
+ * the mentor card + booking buttons. Returns true if it was an ordinal we owned.
+ */
+async function routeSherpaTypedSelection(ev, to, conv, baseState) {
+  const sel = await resolveTypedSelection({
+    text: ev.text,
+    lastResults: conv.draft.sherpa_results,
+    getBySlug: sherpas.getBySlug,
+    sendCard: async (s) => {
+      const ctx = { outbox: [], state: {} };
+      pushSherpaCard(ctx, s);
+      const results = await sendOutbox(to, ctx.outbox);
+      return results.every((r) => r.ok);
+    },
+  });
+  if (!sel.handled) return false; // not an ordinal (or stale slug) → let the LLM handle it
+
+  const hist = Array.isArray(conv.history) ? conv.history : [];
+  const draft = { ...(conv.draft || {}), intro_sent: true };
+  if (sel.sendFailed) {
+    await wa.sendText(to, "Sorry — I couldn't load that mentor just now. Try again?");
+  } else {
+    hist.push({ role: 'user', content: ev.text });
+    hist.push({
+      role: 'assistant',
+      content: `(internal note — already shown to the user: the mentor card for ${sel.founder.name})`,
+    });
+  }
+  await saveConversation(to, { ...baseState, history: hist.slice(-10), draft });
+  return true;
 }
 
 module.exports = { handleEvent };

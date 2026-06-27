@@ -4,6 +4,8 @@
  * Render founder records into WhatsApp-friendly text/rows.
  */
 
+const { PREP_DOC_URL, FEEDBACK_FORM_URL } = require('../domain/sherpaAreas');
+
 /**
  * Request a higher-resolution variant where the host supports it.
  * Google account photos (lh3.googleusercontent.com) carry a size suffix like
@@ -119,4 +121,72 @@ function truncate(s, n) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
-module.exports = { avatarFor, hiResAvatar, subtitle, toRow, profileCaption, matchCaption, focusFields, truncate };
+// ─── Sherpas (mentor hours) ──────────────────────────────────────────────────
+
+/** A list row for a single mentor. id encodes the get-sherpa action. */
+function sherpaRow(s) {
+  return {
+    id: `sherpa:${s.slug}`,
+    title: s.name,
+    description: truncate(s.expertise || '', 72),
+  };
+}
+
+/** A list row for an expertise area. id encodes the list-by-area action. */
+function areaRow(a) {
+  return {
+    id: `area:${a.key}`,
+    title: a.label,
+    description: `${a.count} mentor${a.count === 1 ? '' : 's'}`,
+  };
+}
+
+/** Booking message: the external link + the two program guardrails. */
+function bookingMessage(s) {
+  return [
+    `📅 Book a 1:1 with *${s.name}*:`,
+    s.booking_url,
+    '',
+    `Before the call: copy & fill the prep doc, then share the link with them — ${PREP_DOC_URL}`,
+    `After the call: a 2-min feedback form — ${FEEDBACK_FORM_URL}`,
+  ].join('\n');
+}
+
+/** Prep-doc reminder, sent on its own (e.g. the "Prep doc" button). */
+function prepMessage() {
+  return [
+    'Make a copy of the Founder Talk prep doc, fill it out, and share the editable link with your mentor before the meeting — it makes the session far more useful:',
+    PREP_DOC_URL,
+  ].join('\n');
+}
+
+/** Mentor profile card caption for an image card. Omits fields that are absent. */
+function sherpaCard(s) {
+  const lines = [`*${s.name}*`];
+  if (s.expertise) lines.push(s.expertise);
+  if (s.bio) {
+    lines.push('');
+    lines.push(truncate(s.bio.trim(), 300));
+  }
+  if (s.linkedin_url) {
+    lines.push('');
+    lines.push(s.linkedin_url);
+  }
+  return lines.join('\n');
+}
+
+module.exports = {
+  avatarFor,
+  hiResAvatar,
+  subtitle,
+  toRow,
+  profileCaption,
+  matchCaption,
+  focusFields,
+  truncate,
+  sherpaRow,
+  areaRow,
+  sherpaCard,
+  bookingMessage,
+  prepMessage,
+};
