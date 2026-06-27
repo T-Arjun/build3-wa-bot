@@ -327,7 +327,7 @@ const impls = {
 };
 
 const SHERPA_SHOWN_NOTE =
-  "Your text reply is sent FIRST, then the mentor's card and a message with their booking link + prep/feedback reminders appear right below it. Open with a warm, helpful lead-in (1–2 short sentences, build3 tone): affirm it's a solid pick for what they need and point them to the booking link below. Do NOT repeat the link, the reminders, the mentor's details, or list other mentors.";
+  "Your text reply is sent FIRST, then the mentor's card and three buttons — Book a slot, Prep doc, More mentors — appear right below it. Open with a warm, helpful lead-in (1–2 short sentences, build3 tone): affirm it's a solid pick for what they need and tell them to tap Book a slot to grab a time. Do NOT repeat the mentor's details or list other mentors.";
 
 function pushProfile(ctx, f) {
   ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(f), caption: fmt.profileCaption(f) });
@@ -361,17 +361,20 @@ function pushSherpaList(ctx, list, body) {
 }
 
 /**
- * Push a mentor's profile card, then the booking link itself (with the prep-doc
- * + feedback reminders) directly — no "Book a slot" tap in between. A single
- * "More mentors" button follows for navigation (context first, option after).
+ * Push a mentor's profile card, then three reply buttons:
+ * Book a slot (→ booking link), Prep doc (→ prep template), More mentors (→ area).
+ * The tap handlers live in handler.routeReply (book:/prep:/area:).
  */
 function pushSherpaCard(ctx, s) {
   ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(s), caption: fmt.sherpaCard(s) });
-  ctx.outbox.push({ kind: 'text', body: fmt.bookingMessage(s) });
   ctx.outbox.push({
     kind: 'buttons',
-    body: 'Need a different mentor?',
-    buttons: [{ id: `area:${(s.areas && s.areas[0]) || 'gtm'}`, title: 'More mentors' }],
+    body: `Book a 1:1 with ${s.name}?`,
+    buttons: [
+      { id: `book:${s.slug}`, title: 'Book a slot' },
+      { id: `prep:${s.slug}`, title: 'Prep doc' },
+      { id: `area:${(s.areas && s.areas[0]) || 'gtm'}`, title: 'More mentors' },
+    ],
   });
 }
 
