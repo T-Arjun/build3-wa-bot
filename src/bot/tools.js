@@ -316,11 +316,31 @@ const impls = {
     // No hard "need criteria" gate - a broad search returns sensible results
     // (cofounder-seekers, or soft fallback). The engine clarifies at most once
     // at the conversation layer; once the user wants results, we always show some.
-    const { results, poolSize, tooFew, soft } = await findCofounders(
-      filters,
-      ctx.requesterSlug,
-      ctx.self,
-    );
+    let { results, poolSize, tooFew, soft } = await findCofounders(filters, ctx.requesterSlug, ctx.self);
+    let dropped = [];
+    // Deterministic backstop (don't rely on the model alone - it has repeated
+    // this exact mistake live, twice): city AND sector are the #1 false-empty
+    // causes, because they very often describe the USER's OWN startup (leaked
+    // in via set_self_profile) rather than a real requirement on the cofounder
+    // - "I run a d2c brand" does not mean the cofounder must also be d2c. Before
+    // reporting "no matches" at all, progressively drop city then sector (the
+    // skill they actually asked for is NEVER dropped) and use the first level
+    // that produces a real pool. Never manufacture a false "nobody exists" from
+    // a filter the person likely didn't mean to put on the OTHER person.
+    if ((poolSize === 0 || results.length === 0) && (filters.city || filters.sector)) {
+      const attempts = [];
+      if (filters.city) attempts.push({ city: undefined, label: filters.city });
+      if (filters.sector) attempts.push({ sector: undefined, label: filters.sector });
+      if (filters.city && filters.sector) attempts.push({ city: undefined, sector: undefined, label: `${filters.city}/${filters.sector}` });
+      for (const { label, ...drop } of attempts) {
+        const wider = await findCofounders({ ...filters, ...drop }, ctx.requesterSlug, ctx.self);
+        if (wider.poolSize > 0 && wider.results.length > 0) {
+          ({ results, poolSize, tooFew, soft } = wider);
+          dropped = Object.keys(drop);
+          break;
+        }
+      }
+    }
     ctx.state.topic_changed = true;
     if (poolSize === 0 || results.length === 0) {
       return { status: 'too_few', poolSize };
@@ -367,7 +387,9 @@ const impls = {
       shown: top.length,
       total: fresh.length,
       tooFew: fresh.length < 3,
-      note: MATCH_SHOWN_NOTE,
+      note: dropped.length
+        ? `No strong match against the original ${dropped.join('/')} filter, so these are from a widened search instead - say that honestly in one line (e.g. "not many matching that exactly, but here's from the wider community:"), don't pretend the constraint was never mentioned. ${MATCH_SHOWN_NOTE}`
+        : MATCH_SHOWN_NOTE,
     };
   },
 
