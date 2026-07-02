@@ -2,7 +2,7 @@
 
 const { supabase } = require('../config/supabase');
 const { COFOUNDER_INTENT } = require('./enums');
-const { locationFilter, normalize } = require('./geo');
+const { locationFilter, normalize, editDistance } = require('./geo');
 const log = require('../lib/logger');
 
 /**
@@ -286,7 +286,46 @@ async function findByName(name, limit = 5) {
     const bn = String(b.name || '').toLowerCase();
     return (bn.includes(q) ? 1 : 0) - (an.includes(q) ? 1 : 0);
   });
-  return dedupeFounders(ranked).slice(0, limit);
+  const deduped = dedupeFounders(ranked);
+  if (deduped.length) return deduped.slice(0, limit);
+  // Nothing matched by substring: try a typo-tolerant pass ("umaier" -> "Umair
+  // Tariq"). Only when exact/substring found nothing, so it never degrades a
+  // good match.
+  return fuzzyByName(tokens.length ? tokens : [q], limit);
+}
+
+/**
+ * Typo-tolerant name lookup: pull published names and keep those whose any word
+ * is within a small edit distance of any query token. Conservative thresholds so
+ * "umaier"->"Umair" resolves but unrelated names don't.
+ */
+async function fuzzyByName(queryTokens, limit) {
+  const toks = queryTokens.filter((t) => t && t.length >= 4);
+  if (!toks.length) return [];
+  const { data, error } = await supabase()
+    .from('founders')
+    .select(LIST_COLUMNS)
+    .eq('is_published', true);
+  if (error) throw new Error(`fuzzyByName: ${error.message}`);
+  const scored = [];
+  for (const f of data || []) {
+    const words = String(f.name || '')
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+    let best = Infinity;
+    for (const t of toks) {
+      const maxD = t.length > 6 ? 2 : 1;
+      for (const w of words) {
+        if (Math.abs(w.length - t.length) > maxD) continue;
+        const d = editDistance(t, w);
+        if (d <= maxD && d < best) best = d;
+      }
+    }
+    if (best !== Infinity) scored.push({ f, d: best });
+  }
+  scored.sort((a, b) => a.d - b.d);
+  return dedupeFounders(scored.map((x) => x.f)).slice(0, limit);
 }
 
 /**

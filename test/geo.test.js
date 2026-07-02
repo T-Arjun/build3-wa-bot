@@ -8,6 +8,7 @@ const {
   closestKnown,
   locationFilter,
   stateForCity,
+  editDistance,
   CITY_STATE,
   STATE_TO_CITIES,
 } = require('../src/domain/geo');
@@ -207,4 +208,11 @@ test('stateForCity backfills a founder city to its state (Title Case)', () => {
   assert.strictEqual(stateForCity('Chennai'), 'Tamil Nadu');
   assert.strictEqual(stateForCity('Dubai'), null); // foreign: keep whatever the API gave
   assert.strictEqual(stateForCity(''), null);
+});
+
+test('editDistance is tight enough for typo-tolerant name lookup', () => {
+  assert.ok(editDistance('umaier', 'umair') <= 2); // the real "umaier" -> "Umair" flop
+  assert.ok(editDistance('bavana', 'bhavana') <= 2);
+  assert.ok(editDistance('varn', 'varun') <= 2);
+  assert.ok(editDistance('xyzqwe', 'umair') > 2); // unrelated stays unmatched
 });
