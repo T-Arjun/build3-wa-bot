@@ -250,14 +250,14 @@ async function routeReply(ev, to, conv, baseState) {
     const list = await sherpas.listByArea(key);
     const draft = { ...(conv.draft || {}), intro_sent: true };
     if (!list.length) {
-      await wa.sendText(to, 'no sherpas in that area right now. try another?');
+      await wa.sendText(to, 'no Sherpas in that area right now. try another?');
     } else {
       await sendOutbox(to, [
         {
           kind: 'list',
           header: 'Sherpa hours',
-          body: `sherpas for ${areaLabel(key)}. tap one to view and book:`,
-          button: 'View sherpa',
+          body: `Sherpas for ${areaLabel(key)}. tap one to view and book:`,
+          button: 'View Sherpa',
           rows: list.map(fmt.sherpaRow),
         },
       ]);

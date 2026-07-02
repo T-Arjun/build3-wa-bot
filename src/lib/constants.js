@@ -5,6 +5,6 @@ const DISCLAIMER = 'build3 internal beta · we can get things wrong';
 
 // One-time intro shown on a user's first interaction.
 const INTRO =
-  "👋 Quick heads-up: I'm an internal *build3 beta* assistant, still being tested, so I can sometimes get things wrong. Thanks for helping us improve!";
+  "👋 quick heads-up: this is build3's internal beta assistant, still being tested, so we can get things wrong sometimes. thanks for helping us improve!";
 
 module.exports = { DISCLAIMER, INTRO };

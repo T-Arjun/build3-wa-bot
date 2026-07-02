@@ -67,8 +67,8 @@ test('sherpaRow / areaRow produce valid WhatsApp list rows', () => {
 
   const areaRow = fmt.areaRow({ key: 'fundraising', label: 'Fundraising & finance', count: 5 });
   assert.strictEqual(areaRow.id, 'area:fundraising');
-  assert.match(areaRow.description, /5 sherpas/);
-  assert.match(fmt.areaRow({ key: 'impact', label: 'x', count: 1 }).description, /1 sherpa$/);
+  assert.match(areaRow.description, /5 Sherpas/);
+  assert.match(fmt.areaRow({ key: 'impact', label: 'x', count: 1 }).description, /1 Sherpa$/);
 });
 
 test('sherpaCard includes LinkedIn only when present', () => {

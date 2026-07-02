@@ -70,8 +70,11 @@ function subtitle(f) {
   // Ideas often restate the company ("XAGI Labs: XAGI Labs is an AI…") - strip
   // the leading name so the compact row reads "XAGI Labs: an AI research…".
   if (nameText && ideaText) {
-    const esc = nameText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    ideaText = realText(ideaText.replace(new RegExp(`^${esc}[\\s:,-]*(is\\s+)?`, 'i'), '')) || ideaText;
+    // Normalize straight/curly quotes so '"I": "I" is a personal AI…' dedupes too.
+    const bare = nameText.replace(/["“”'‘’]/g, '');
+    const esc = bare.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const stripped = ideaText.replace(new RegExp(`^["“”'‘’]?${esc}["“”'‘’]?[\\s:,-]*(is\\s+)?`, 'i'), '');
+    ideaText = realText(stripped) || ideaText;
   }
   let what = null;
   if (nameText && ideaText) what = truncate(`${nameText}: ${ideaText}`, budget);
@@ -88,12 +91,34 @@ function hasCohort(f) {
 }
 
 /**
+ * Fix shouting/mumbling name casing from the source data: "ACHYUTHA YESWANTH
+ * SRIRAJ" -> "Achyutha Yeswanth Sriraj", "harshita chandra" -> "Harshita
+ * Chandra". Mixed-case names pass through untouched (intentional casing).
+ */
+function displayName(name) {
+  const n = String(name || '').trim();
+  if (!n) return n;
+  // Per word: ALL-CAPS words are lowered then capitalized; all-lowercase words
+  // get a capital initial ("Mohammad huzaifa" -> "Mohammad Huzaifa"). Words
+  // with intentional mixed case ("McKinsey", "vStart") pass through.
+  return n
+    .split(/(\s+)/)
+    .map((w) => {
+      if (!/[A-Za-z]/.test(w)) return w;
+      if (!/[a-z]/.test(w)) w = w.toLowerCase();
+      if (!/[A-Z]/.test(w)) return w.replace(/(^|['.-])([a-z])/g, (m, sep, ch) => sep + ch.toUpperCase());
+      return w;
+    })
+    .join('');
+}
+
+/**
  * Shorten a person's name to fit WhatsApp's 24-char row-title cap with dignity:
  * drop middle names, then initial the surname ("Muralidharan Senthilkumaran" ->
  * "Muralidharan S."), instead of letting the API chop it mid-word ("…").
  */
 function shortName(name, max = 24) {
-  const n = String(name || '').trim();
+  const n = displayName(name);
   if (n.length <= max) return n;
   const parts = n.split(/\s+/);
   if (parts.length >= 2) {
@@ -116,13 +141,13 @@ function toRow(f) {
 
 /** Full profile caption for an image card. Only includes fields that exist. */
 function profileCaption(f) {
-  const lines = [`*${f.name}*`];
+  const lines = [`*${displayName(f.name)}*`];
 
   // Company name LEADS the meta line - it's how founders identify each other.
+  // (No raw program codes like "biA": cohort already carries membership.)
   const nameText = realText(f.startup_name);
   const meta = [nameText ? `*${nameText}*` : null, f.sector, f.city].filter(Boolean);
   if (hasCohort(f)) meta.push(`Cohort ${f.cohort}`);
-  if (f.program) meta.push(f.program);
   if (meta.length) lines.push(meta.join(' · '));
 
   const ideaText = realText(f.startup_idea);
@@ -135,7 +160,7 @@ function profileCaption(f) {
   if (f.startup_stage) lines.push(`Stage: ${f.startup_stage}`);
   if (f.skills?.length) lines.push(`Skills: ${f.skills.slice(0, 8).join(', ')}`);
   if (f.looking_for?.length) lines.push(`Open to: ${f.looking_for.join(', ')}`);
-  if (f.dharma) lines.push(`Archetype: ${f.dharma}`);
+  if (f.dharma) lines.push(`Dharma: ${f.dharma}`);
   if (f.linkedin_url) {
     lines.push('');
     lines.push(f.linkedin_url);
@@ -163,7 +188,7 @@ function focusFields(f) {
 
 /** A single cofounder match block (used when sent as an image card caption). */
 function matchCaption(m) {
-  const lines = [`*${m.name}* - ${m.score}/100`];
+  const lines = [`*${displayName(m.name)}* · ${m.score}/100 match`];
   // Company name leads, then what they're building, then location.
   const ideaText = realText(m.startup_idea);
   const nameText = realText(m.startup_name);
@@ -181,8 +206,13 @@ function matchCaption(m) {
 }
 
 function truncate(s, n) {
+  // Word-aware: cut at the last space when it doesn't cost too much, so rows
+  // read "10x your…" instead of "10x your competiti…".
   s = String(s == null ? '' : s);
-  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+  if (s.length <= n) return s;
+  const cut = s.slice(0, n - 1);
+  const sp = cut.lastIndexOf(' ');
+  return (sp > (n - 1) * 0.6 ? cut.slice(0, sp).replace(/[\s,:;.-]+$/, '') : cut) + '…';
 }
 
 // ─── Sherpas (mentor hours) ──────────────────────────────────────────────────
@@ -201,7 +231,7 @@ function areaRow(a) {
   return {
     id: `area:${a.key}`,
     title: a.label,
-    description: `${a.count} sherpa${a.count === 1 ? '' : 's'}`,
+    description: `${a.count} Sherpa${a.count === 1 ? '' : 's'}`,
   };
 }
 
@@ -219,7 +249,7 @@ function bookingMessage(s) {
 /** Prep-doc + feedback reminder, sent on its own (the "Prep doc" button). */
 function prepMessage() {
   return [
-    'make a copy of the founder talk prep doc, fill it out, and share the editable link with your sherpa before the call - it makes the session far more useful:',
+    'make a copy of the founder talk prep doc, fill it out, and share the editable link with your Sherpa before the call - it makes the session far more useful:',
     PREP_DOC_URL,
     '',
     'after the call, take 2 minutes to share feedback 🙏',
@@ -244,6 +274,7 @@ function sherpaCard(s) {
 
 module.exports = {
   avatarFor,
+  displayName,
   hiResAvatar,
   subtitle,
   shortName,

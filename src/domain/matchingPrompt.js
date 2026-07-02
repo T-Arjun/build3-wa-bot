@@ -67,7 +67,7 @@ JSON format:
 CRITICAL - REASON TONE RULES. You MUST start each reason with one of the required prefixes below based on the score. This is non-negotiable.
 
 Score 80-100 - Start reasons with phrases like:
-  "Perfectly complements...", "Exceptional fit -", "Exactly the ___ you need -", "Rare alignment:", "Standout match -"
+  "Directly complements...", "Clear fit -", "Exactly the ___ you asked for -", "Aligned on...", "Strong match -"
 
 Score 60-79 - Start reasons with phrases like:
   "Strong complement -", "Good fit:", "Solid alignment -", "Works well -", "Adds value with..."
@@ -121,7 +121,7 @@ ${seekingNote ? `\nContext: ${seekingNote}` : ''}${reqNote}
 CANDIDATES (${candidates.length} total):
 ${candidateLines.join('\n')}
 
-Score every candidate. Apply the reason language rules strictly based on each score. Write every reason TO the target founder in second person ("brings the sales muscle you need"), never "the target" or phrases like "non-technical target". Return JSON only.`;
+Score every candidate. Apply the reason language rules strictly based on each score. Write every reason TO the target founder in second person ("brings the sales muscle you need"), never "the target" or phrases like "non-technical target". Reasons are lowercase (except names/places/acronyms), factual, and free of grading adjectives like "perfectly", "exceptional", "amazing": lead with the concrete fact and let the score do the judging. Return JSON only.`;
 }
 
 module.exports = { buildSystemPrompt, buildUserPrompt, founderToPromptString };

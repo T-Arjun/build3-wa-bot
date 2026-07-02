@@ -161,6 +161,9 @@ function hasAnyFilter(f) {
 const SHOWN_NOTE =
   'The full profile card (photo + startup, sector, city, skills, LinkedIn) has ALREADY been sent to the user. Do NOT offer to show the profile again. Keep any text to a one-line confirmation; you may offer "similar founders".';
 
+const MATCH_SHOWN_NOTE =
+  'Your text reply is sent FIRST, then the match cards appear below it as photo cards. Photo cards are NOT tappable - NEVER tell the user to "tap the card". Write a warm 1-2 line lead-in (why these people), and offer the real next step: their full profile + LinkedIn on request ("say the word and we\'ll pull up their full profile"). If the user\'s message asked anything else too, answer that part in the same reply.';
+
 const LIST_SHOWN_NOTE =
   'Your text reply is sent FIRST, then the interactive list/cards appear right below it. Write a warm, helpful lead-in (1-2 short sentences, build3 tone) that frames what they are about to see and invites them to tap. Do NOT enumerate or repeat the names/items - the list already shows them; repeating them is the mistake to avoid. IMPORTANT: if the user\'s message also asked something ELSE besides this search (another question or need), answer that part too in the same reply, even in one line; never silently drop a part of their message.';
 
@@ -198,7 +201,7 @@ const impls = {
           const mentor = await sherpaByName(args.query);
           if (mentor) {
             pushSherpaCard(ctx, mentor);
-            return { status: 'shown_mentor', name: mentor.name, note: SHERPA_SHOWN_NOTE };
+            return { status: 'shown_sherpa', name: mentor.name, note: SHERPA_SHOWN_NOTE };
           }
         }
         return {
@@ -233,7 +236,7 @@ const impls = {
     }
     ctx.outbox.push({
       kind: 'list',
-      body: `found ${count}${count > results.length ? `, showing ${results.length}` : ''}. tap one to view:`,
+      body: `found ${count}${count > results.length ? ` · showing the top ${results.length}` : ''} · tap one to view:`,
       button: 'View founders',
       rows: results.map(fmt.toRow),
     });
@@ -250,21 +253,34 @@ const impls = {
 
   async get_profile(args, ctx) {
     const shownNote = SHOWN_NOTE;
+    // The person whose card is ALREADY on screen (focus) never gets re-sent:
+    // answer from facts instead. Kills the "asks for similar people, receives
+    // the same card again" duplicate.
+    const alreadyShown = (f) => ({
+      status: 'already_on_screen',
+      name: f.name,
+      facts: fmt.focusFields(f),
+      note: 'This person\'s card is ALREADY on the user\'s screen from earlier - it was NOT re-sent. Answer from the facts; do not describe a new card.',
+    });
     if (args.slug) {
       const f = await founders.getBySlug(args.slug);
       if (!f) return { status: 'none' };
+      if (ctx.focusSlug && f.source_slug === ctx.focusSlug) return alreadyShown(f);
       pushProfile(ctx, f);
       ctx.state.focus = fmt.focusFields(f);
       return { status: 'shown', name: f.name, facts: ctx.state.focus, note: shownNote };
     }
     const matches = await founders.findByName(args.name || '', 5);
+    if (matches.length === 1 && ctx.focusSlug && matches[0].source_slug === ctx.focusSlug) {
+      return alreadyShown(matches[0]);
+    }
     if (matches.length === 0) {
       // Not a founder - but it may be one of the 13 mentors ("that Arvind guy").
       // Never tell the user a person "doesn't exist" when they're a Sherpa.
       const mentor = await sherpaByName(args.name);
       if (mentor) {
         pushSherpaCard(ctx, mentor);
-        return { status: 'shown_mentor', name: mentor.name, note: SHERPA_SHOWN_NOTE };
+        return { status: 'shown_sherpa', name: mentor.name, note: SHERPA_SHOWN_NOTE };
       }
       return { status: 'none', query: args.name };
     }
@@ -315,8 +331,8 @@ const impls = {
       ctx.outbox.push({
         kind: 'text',
         body:
-          "I didn't find anyone there who's said they're actively looking for a cofounder. " +
-          'But we do have a few founder connects from that search - they\'re not explicitly seeking, ' +
+          "we didn't find anyone there who's said they're actively looking for a cofounder. " +
+          'but we do have a few founder connects from that search - they\'re not explicitly seeking, ' +
           'though if you like, we can help you start a conversation with them:',
       });
     }
@@ -341,7 +357,7 @@ const impls = {
       shown: top.length,
       total: fresh.length,
       tooFew: fresh.length < 3,
-      note: LIST_SHOWN_NOTE,
+      note: MATCH_SHOWN_NOTE,
     };
   },
 
@@ -357,7 +373,7 @@ const impls = {
     return {
       status: 'saved',
       self,
-      note: 'Saved their background. If they were after a cofounder, call find_cofounders now so matches are personalized to them. Do not ask for this info again.',
+      note: 'Saved their background (silent bookkeeping - NEVER make "got your profile set" the reply). Now answer what they actually ASKED: if they asked for people or a cofounder, call the right search tool in this same turn. If you searched, your reply frames the results, not the profile save. Do not ask for this info again.',
     };
   },
 
@@ -370,7 +386,7 @@ const impls = {
         return { status: 'shown', name: matches[0].name, note: SHERPA_SHOWN_NOTE };
       }
       if (matches.length > 1) {
-        pushSherpaList(ctx, matches, 'sherpas who can help with that. tap one to view and book:');
+        pushSherpaList(ctx, matches, 'Sherpas who can help with that. tap one to view and book:');
         return { status: 'ok', shown: matches.length, note: LIST_SHOWN_NOTE };
       }
       // No mentor literally lists that topic - don't show the area picker yet;
@@ -385,7 +401,7 @@ const impls = {
     if (args.area && AREA_KEYS.includes(args.area)) {
       const list = await sherpas.listByArea(args.area);
       if (!list.length) return { status: 'none', area: args.area };
-      pushSherpaList(ctx, list, `sherpas for ${areaLabel(args.area)}. tap one to view and book:`);
+      pushSherpaList(ctx, list, `Sherpas for ${areaLabel(args.area)}. tap one to view and book:`);
       return { status: 'ok', area: args.area, shown: list.length, note: LIST_SHOWN_NOTE };
     }
     // Default: show the area picker.
@@ -409,7 +425,7 @@ const impls = {
 };
 
 const SHERPA_SHOWN_NOTE =
-  "Your text reply is sent FIRST, then the Sherpa's card, a 'Book a slot' button that opens their calendar directly, and a Prep doc / More sherpas row appear right below it. Open with a warm, helpful lead-in (1-2 short sentences, build3 tone): affirm it's a solid pick and tell them to tap Book a slot to pick a time. Do NOT repeat the Sherpa's details or list other Sherpas. Always say Sherpa, never mentor.";
+  "Your text reply is sent FIRST, then the Sherpa's card, a 'Book a slot' button that opens their calendar directly, and a Prep doc / More Sherpas row appear right below it. Open with a warm lead-in (1-2 short lowercase sentences, build3 tone) affirming the pick. Do NOT repeat the Sherpa's details, do NOT list other Sherpas, and do NOT offer the prep doc in your text (the Prep doc button is right there). Always say Sherpa, never mentor.";
 
 /**
  * Resolve a person-name mention to exactly one mentor, or null. Guards the
@@ -436,7 +452,7 @@ async function showAreas(ctx) {
   ctx.outbox.push({
     kind: 'list',
     header: 'Sherpa hours',
-    body: 'free 1:1 sherpa hours: time with folks who have walked the path. pick an area to see who can help:',
+    body: 'free 1:1 Sherpa hours: time with folks who have walked the path. pick an area to see who can help:',
     button: 'Choose an area',
     rows: areas.map(fmt.areaRow),
   });
@@ -450,7 +466,7 @@ function pushSherpaList(ctx, list, body) {
     kind: 'list',
     header: 'Sherpa hours',
     body,
-    button: 'View sherpa',
+    button: 'View Sherpa',
     rows: list.map(fmt.sherpaRow),
   });
   ctx.state.last_results = []; // not a founder list
@@ -475,10 +491,10 @@ function pushSherpaCard(ctx, s) {
   });
   ctx.outbox.push({
     kind: 'buttons',
-    body: 'grab the prep doc before your call, or see other sherpas 👇',
+    body: 'grab the prep doc before your call, or see other Sherpas 👇',
     buttons: [
       { id: `prep:${s.slug}`, title: 'Prep doc' },
-      { id: `area:${(s.areas && s.areas[0]) || 'gtm'}`, title: 'More sherpas' },
+      { id: `area:${(s.areas && s.areas[0]) || 'gtm'}`, title: 'More Sherpas' },
     ],
   });
 }
