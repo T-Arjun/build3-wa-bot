@@ -90,11 +90,11 @@ const definitions = [
     function: {
       name: 'list_sherpas',
       description:
-        'Browse build3 mentors ("Sherpas") to book free 1:1 mentor hours. Call with NO args to show the expertise areas; with `area` to list mentors in one area; with `query` to surface mentors for a topic the founder needs help with (e.g. "pricing", "hiring", "fundraising").',
+        'Browse build3\'s Sherpas (experienced founders/operators who guide 1:1) to book free Sherpa hours. Call with NO args to show the expertise areas; with `area` to list Sherpas in one area; with `query` to surface Sherpas for a topic the founder needs help with (e.g. "pricing", "hiring", "fundraising").',
       parameters: {
         type: 'object',
         properties: {
-          area: { type: 'string', enum: AREA_KEYS, description: 'expertise area to list mentors for' },
+          area: { type: 'string', enum: AREA_KEYS, description: 'expertise area to list Sherpas for' },
           query: {
             type: 'string',
             description: 'free-text topic the founder needs help with',
@@ -109,7 +109,7 @@ const definitions = [
     function: {
       name: 'send_prep_doc',
       description:
-        'Send the mentor-session prep doc link (plus the post-call feedback form link) to the user. Call this whenever they ask for the prep doc, what to prepare, or how to get ready for a mentor call. Never describe or promise the doc without calling this.',
+        'Send the Sherpa-session prep doc link (plus the post-call feedback form link) to the user. Call this whenever they ask for the prep doc, what to prepare, or how to get ready for a Sherpa call. Never describe or promise the doc without calling this.',
       parameters: { type: 'object', properties: {}, additionalProperties: false },
     },
   },
@@ -118,7 +118,7 @@ const definitions = [
     function: {
       name: 'get_sherpa',
       description:
-        "Show one mentor's profile card with their booking link and the prep-doc / feedback reminders. Use the slug from a list_sherpas result.",
+        "Show one Sherpa's profile card with their booking link and the prep-doc / feedback reminders. Use the slug from a list_sherpas result.",
       parameters: {
         type: 'object',
         properties: {
@@ -233,7 +233,7 @@ const impls = {
     }
     ctx.outbox.push({
       kind: 'list',
-      body: `Found ${count}${count > results.length ? `, showing ${results.length}` : ''}. Tap one to view:`,
+      body: `found ${count}${count > results.length ? `, showing ${results.length}` : ''}. tap one to view:`,
       button: 'View founders',
       rows: results.map(fmt.toRow),
     });
@@ -275,7 +275,7 @@ const impls = {
     }
     ctx.outbox.push({
       kind: 'list',
-      body: `I found a few - which ${args.name}?`,
+      body: `found a few - which ${args.name}?`,
       button: 'Choose',
       rows: matches.map(fmt.toRow),
     });
@@ -370,14 +370,14 @@ const impls = {
         return { status: 'shown', name: matches[0].name, note: SHERPA_SHOWN_NOTE };
       }
       if (matches.length > 1) {
-        pushSherpaList(ctx, matches, 'Mentors who can help with that. Tap one to view and book:');
+        pushSherpaList(ctx, matches, 'sherpas who can help with that. tap one to view and book:');
         return { status: 'ok', shown: matches.length, note: LIST_SHOWN_NOTE };
       }
       // No mentor literally lists that topic - don't show the area picker yet;
       // nudge the model to retry with the closest area so only ONE list renders.
       return {
         status: 'no_topic_match',
-        note: 'No mentor explicitly lists that topic. Call list_sherpas again with the closest `area` from the enum; do not reply to the user yet.',
+        note: 'No Sherpa explicitly lists that topic. Call list_sherpas again with the closest `area` from the enum; do not reply to the user yet.',
         areas: AREA_KEYS,
       };
     }
@@ -385,7 +385,7 @@ const impls = {
     if (args.area && AREA_KEYS.includes(args.area)) {
       const list = await sherpas.listByArea(args.area);
       if (!list.length) return { status: 'none', area: args.area };
-      pushSherpaList(ctx, list, `Mentors for ${areaLabel(args.area)}. Tap one to view and book:`);
+      pushSherpaList(ctx, list, `sherpas for ${areaLabel(args.area)}. tap one to view and book:`);
       return { status: 'ok', area: args.area, shown: list.length, note: LIST_SHOWN_NOTE };
     }
     // Default: show the area picker.
@@ -409,7 +409,7 @@ const impls = {
 };
 
 const SHERPA_SHOWN_NOTE =
-  "Your text reply is sent FIRST, then the mentor's card, a 'Book a slot' button that opens their calendar directly, and a Prep doc / More mentors row appear right below it. Open with a warm, helpful lead-in (1-2 short sentences, build3 tone): affirm it's a solid pick and tell them to tap Book a slot to pick a time. Do NOT repeat the mentor's details or list other mentors.";
+  "Your text reply is sent FIRST, then the Sherpa's card, a 'Book a slot' button that opens their calendar directly, and a Prep doc / More sherpas row appear right below it. Open with a warm, helpful lead-in (1-2 short sentences, build3 tone): affirm it's a solid pick and tell them to tap Book a slot to pick a time. Do NOT repeat the Sherpa's details or list other Sherpas. Always say Sherpa, never mentor.";
 
 /**
  * Resolve a person-name mention to exactly one mentor, or null. Guards the
@@ -435,8 +435,8 @@ async function showAreas(ctx) {
   const areas = await sherpas.listAreas();
   ctx.outbox.push({
     kind: 'list',
-    header: 'Mentor Hours',
-    body: 'Book free 1:1 mentor hours with a build3 Sherpa. Pick an area to see who can help:',
+    header: 'Sherpa hours',
+    body: 'free 1:1 sherpa hours: time with folks who have walked the path. pick an area to see who can help:',
     button: 'Choose an area',
     rows: areas.map(fmt.areaRow),
   });
@@ -448,9 +448,9 @@ async function showAreas(ctx) {
 function pushSherpaList(ctx, list, body) {
   ctx.outbox.push({
     kind: 'list',
-    header: 'Mentor Hours',
+    header: 'Sherpa hours',
     body,
-    button: 'View mentor',
+    button: 'View sherpa',
     rows: list.map(fmt.sherpaRow),
   });
   ctx.state.last_results = []; // not a founder list
@@ -475,10 +475,10 @@ function pushSherpaCard(ctx, s) {
   });
   ctx.outbox.push({
     kind: 'buttons',
-    body: 'Grab the prep doc before your call, or see other mentors 👇',
+    body: 'grab the prep doc before your call, or see other sherpas 👇',
     buttons: [
       { id: `prep:${s.slug}`, title: 'Prep doc' },
-      { id: `area:${(s.areas && s.areas[0]) || 'gtm'}`, title: 'More mentors' },
+      { id: `area:${(s.areas && s.areas[0]) || 'gtm'}`, title: 'More sherpas' },
     ],
   });
 }

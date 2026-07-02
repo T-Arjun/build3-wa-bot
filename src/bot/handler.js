@@ -163,7 +163,7 @@ async function routeTypedSelection(ev, to, conv, baseState) {
   const hist = Array.isArray(conv.history) ? conv.history : [];
   const draft = { ...(conv.draft || {}), intro_sent: true };
   if (sel.sendFailed) {
-    await wa.sendText(to, "Sorry, I couldn't load that profile just now. Try again?");
+    await wa.sendText(to, "sorry, couldn't load that profile just now. try again?");
   } else {
     hist.push({ role: 'user', content: ev.text });
     hist.push({ role: 'assistant', content: `(internal note - already shown to the user: the profile of ${sel.founder.name})` });
@@ -198,10 +198,10 @@ async function routeReply(ev, to, conv, baseState) {
         draft.focus = fmt.focusFields(f); // so follow-ups answer from real data
       } else {
         // Card didn't reach the user - don't claim it did, and don't set focus.
-        await wa.sendText(to, "Sorry, I couldn't load that profile just now. Try again?");
+        await wa.sendText(to, "sorry, couldn't load that profile just now. try again?");
       }
     } else {
-      await wa.sendText(to, "I couldn't find that profile anymore.");
+      await wa.sendText(to, "hmm, we couldn't find that profile anymore.");
     }
     await saveConversation(to, { ...baseState, history: hist.slice(-10), draft });
     return true;
@@ -242,14 +242,14 @@ async function routeReply(ev, to, conv, baseState) {
     const list = await sherpas.listByArea(key);
     const draft = { ...(conv.draft || {}), intro_sent: true };
     if (!list.length) {
-      await wa.sendText(to, 'No mentors in that area right now. Try another?');
+      await wa.sendText(to, 'no sherpas in that area right now. try another?');
     } else {
       await sendOutbox(to, [
         {
           kind: 'list',
-          header: 'Mentor Hours',
-          body: `Mentors for ${areaLabel(key)}. Tap one to view and book:`,
-          button: 'View mentor',
+          header: 'Sherpa hours',
+          body: `sherpas for ${areaLabel(key)}. tap one to view and book:`,
+          button: 'View sherpa',
           rows: list.map(fmt.sherpaRow),
         },
       ]);
@@ -268,10 +268,10 @@ async function routeReply(ev, to, conv, baseState) {
       pushSherpaCard(ctx, s);
       const results = await sendOutbox(to, ctx.outbox);
       if (!results.every((r) => r.ok)) {
-        await wa.sendText(to, "Sorry, I couldn't load that mentor just now. Try again?");
+        await wa.sendText(to, "sorry, couldn't load that sherpa just now. try again?");
       }
     } else {
-      await wa.sendText(to, "I couldn't find that mentor anymore.");
+      await wa.sendText(to, "hmm, we couldn't find that sherpa anymore.");
     }
     await saveConversation(to, { ...baseState, draft });
     return true;
@@ -280,7 +280,7 @@ async function routeReply(ev, to, conv, baseState) {
   if (id.startsWith('book:')) {
     const slug = id.slice('book:'.length);
     const s = await sherpas.getBySlug(slug);
-    await wa.sendText(to, s ? fmt.bookingMessage(s) : "I couldn't find that mentor anymore.");
+    await wa.sendText(to, s ? fmt.bookingMessage(s) : "hmm, we couldn't find that sherpa anymore.");
     await saveConversation(to, { ...baseState, draft: { ...(conv.draft || {}), intro_sent: true } });
     return true;
   }
@@ -316,12 +316,12 @@ async function routeSherpaTypedSelection(ev, to, conv, baseState) {
   const hist = Array.isArray(conv.history) ? conv.history : [];
   const draft = { ...(conv.draft || {}), intro_sent: true };
   if (sel.sendFailed) {
-    await wa.sendText(to, "Sorry, I couldn't load that mentor just now. Try again?");
+    await wa.sendText(to, "sorry, couldn't load that sherpa just now. try again?");
   } else {
     hist.push({ role: 'user', content: ev.text });
     hist.push({
       role: 'assistant',
-      content: `(internal note - already shown to the user: the mentor card for ${sel.founder.name})`,
+      content: `(internal note - already shown to the user: the Sherpa card for ${sel.founder.name})`,
     });
   }
   await saveConversation(to, { ...baseState, history: hist.slice(-10), draft });

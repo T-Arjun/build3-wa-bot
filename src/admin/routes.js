@@ -468,10 +468,10 @@ tr.inactive{opacity:.45}
 <body>
 <div class="header">
   <div class="logo">build3 <span>sherpas</span></div>
-  <div class="badge">MENTOR HOURS</div>
+  <div class="badge">SHERPA HOURS</div>
   <div class="right">
     <a class="btn" href="/admin${qs}">← Monitor</a>
-    <button class="btn primary" onclick="openAdd()">+ Add mentor</button>
+    <button class="btn primary" onclick="openAdd()">+ Add sherpa</button>
   </div>
 </div>
 <div class="wrap">
@@ -484,7 +484,7 @@ tr.inactive{opacity:.45}
 
 <div class="modal-bg" id="modalBg">
   <div class="modal">
-    <h2 id="modalTitle">Add mentor</h2>
+    <h2 id="modalTitle">Add sherpa</h2>
     <div class="field"><label>Name</label><input id="f_name"></div>
     <div class="field"><label>Slug (stable id, lowercase-with-dashes)</label><input id="f_slug" placeholder="varun-chawla"></div>
     <div class="field"><label>Expertise (shown on the card)</label><textarea id="f_expertise" rows="2"></textarea></div>
@@ -523,7 +523,7 @@ async function load(){
         <button class="btn" onclick='edit(\${JSON.stringify(JSON.stringify(s))})'>Edit</button>
         \${s.is_active===false?'':'<button class="btn danger" onclick="deactivate(\\''+esc(s.slug)+'\\')">Off</button>'}
       </td>
-    </tr>\`).join('') || '<tr><td colspan="5" class="muted">No mentors.</td></tr>';
+    </tr>\`).join('') || '<tr><td colspan="5" class="muted">no sherpas.</td></tr>';
 }
 
 function renderAreaChecks(selected){
@@ -533,7 +533,7 @@ function renderAreaChecks(selected){
 }
 function openAdd(){
   editing=null;
-  document.getElementById('modalTitle').textContent='Add mentor';
+  document.getElementById('modalTitle').textContent='Add sherpa';
   for(const id of ['name','slug','expertise','booking','linkedin','avatar']) document.getElementById('f_'+id).value='';
   document.getElementById('f_sort').value=100;
   document.getElementById('f_slug').disabled=false;

@@ -155,14 +155,14 @@ function areaRow(a) {
   return {
     id: `area:${a.key}`,
     title: a.label,
-    description: `${a.count} mentor${a.count === 1 ? '' : 's'}`,
+    description: `${a.count} sherpa${a.count === 1 ? '' : 's'}`,
   };
 }
 
 /** Booking message: the external link + the two program guardrails. */
 function bookingMessage(s) {
   return [
-    `📅 Book a 1:1 with *${s.name}*:`,
+    `📅 book a 1:1 with *${s.name}*:`,
     s.booking_url,
     '',
     `Before the call: copy & fill the prep doc, then share the link with them. ${PREP_DOC_URL}`,
@@ -173,10 +173,10 @@ function bookingMessage(s) {
 /** Prep-doc + feedback reminder, sent on its own (the "Prep doc" button). */
 function prepMessage() {
   return [
-    'Make a copy of the Founder Talk prep doc, fill it out, and share the editable link with your mentor before the meeting - it makes the session far more useful:',
+    'make a copy of the founder talk prep doc, fill it out, and share the editable link with your sherpa before the call - it makes the session far more useful:',
     PREP_DOC_URL,
     '',
-    'After the call, please take 2 minutes to share feedback 🙏',
+    'after the call, take 2 minutes to share feedback 🙏',
     FEEDBACK_FORM_URL,
   ].join('\n');
 }

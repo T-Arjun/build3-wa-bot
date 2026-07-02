@@ -16,17 +16,17 @@ const RULES = [
   {
     key: 'gender',
     re: /\b(women|woman|female|ladies)\s+(founders?|entrepreneurs?|cofounders?|co-founders?|ceos?|folks|people|leaders?)\b|\b(founders?|people|entrepreneurs?)\s+who\s+are\s+(women|woman|female)\b|\b(only|all)\s+(women|female)\b/i,
-    note: "Quick heads up, I don't track gender in the directory, so I can't filter for women specifically.",
+    note: "quick heads up, we don't track gender in the directory, so we can't filter for women specifically.",
   },
   {
     key: 'funding',
     re: /\b(well[ -]?funded|funded founders?|raised\s+(a\s+)?(round|funding|money|seed|series|capital)|by\s+(funding|revenue|valuation)|high[ -]?revenue|revenue\s+of|valuation)\b/i,
-    note: "Quick heads up, I don't have funding or revenue data, so I can't filter by that.",
+    note: "quick heads up, we don't have funding or revenue data, so we can't filter by that.",
   },
   {
     key: 'hiring',
     re: /\bwho(?:'?s| is| are)?\s+hiring\b|\bfounders?\s+(?:(?:who\s+)?are\s+)?hiring\b|\bcompanies?\s+hiring\b|\bare\s+hiring\b/i,
-    note: "Quick heads up, I don't track who's hiring, so I can't filter by that.",
+    note: "quick heads up, we don't track who's hiring, so we can't filter by that.",
   },
 ];
 

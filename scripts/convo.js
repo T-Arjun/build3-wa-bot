@@ -59,6 +59,14 @@ function renderOutbox(outbox) {
     name = argv[ni + 1];
     argv.splice(ni, 2);
   }
+  // --json: emit the full conversation as structured JSON (for visualization).
+  let asJson = false;
+  const ji = argv.indexOf('--json');
+  if (ji !== -1) {
+    asJson = true;
+    argv.splice(ji, 1);
+  }
+  const jsonLog = [];
   let turns;
   try {
     turns = JSON.parse(argv[0] || '[]');
@@ -81,6 +89,14 @@ function renderOutbox(outbox) {
         ].slice(-10);
         console.log(`\nUSER: [taps list row: ${f.name}]`);
         console.log(`  [CARD] ${fmt.profileCaption(f).split('\n').join(' / ')}`);
+        if (asJson) {
+          jsonLog.push({
+            user: `[taps: ${f.name}]`,
+            bot: '',
+            outbox: [{ kind: 'image', url: fmt.avatarFor(f), caption: sanitize(fmt.profileCaption(f)) }],
+            seconds: 0,
+          });
+        }
       } else {
         console.log(`\nUSER: [taps ${slug}] -> NOT FOUND`);
       }
@@ -105,6 +121,14 @@ function renderOutbox(outbox) {
     if (note && !/don't (?:track|have)|can't filter/i.test(outText || '')) {
       outText = outText ? `${note}\n\n${outText}` : `${note} Here's what I do have:`;
     }
+    if (asJson) {
+      jsonLog.push({
+        user: text,
+        bot: sanitize(outText || ''),
+        outbox: JSON.parse(sanitize(JSON.stringify(outbox))),
+        seconds: Number(((Date.now() - started) / 1000).toFixed(1)),
+      });
+    }
     if (outText) console.log(`BOT : ${sanitize(outText)}`);
     if (outbox.length) console.log(sanitize(renderOutbox(outbox)));
     if (!outbox.length && !finalText) console.log('  !! EMPTY REPLY');
@@ -116,6 +140,7 @@ function renderOutbox(outbox) {
     ].slice(-10);
     conv.draft = persistDraft(conv, state);
   }
+  if (asJson) console.log('\n===JSON===\n' + JSON.stringify(jsonLog));
   process.exit(0);
 })().catch((e) => {
   console.error('CONVO CRASH:', e.message);

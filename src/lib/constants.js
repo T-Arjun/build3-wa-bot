@@ -1,7 +1,7 @@
 'use strict';
 
 // Short footer for WhatsApp interactive messages (max 60 chars).
-const DISCLAIMER = 'build3 internal beta · I can make mistakes';
+const DISCLAIMER = 'build3 internal beta · we can get things wrong';
 
 // One-time intro shown on a user's first interaction.
 const INTRO =
