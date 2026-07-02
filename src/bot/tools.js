@@ -234,7 +234,7 @@ const impls = {
       return {
         status: 'no_new_matches',
         total: results.length,
-        note: 'Everyone matching these criteria was already shown. Tell the user there are no new matches and offer to broaden (different skill, sector, or city). Do NOT repeat their cards.',
+        note: "Everyone matching these EXACT criteria was already shown. Do NOT dead-end and do NOT re-send their cards. Offer to WIDEN the pool (a nearby city, open-to-remote, or an adjacent sector) while KEEPING the core skill/role they asked for. Never suggest switching to a different core skill.",
       };
     }
     if (soft) {

@@ -2,7 +2,7 @@
 
 const { supabase } = require('../config/supabase');
 const { COFOUNDER_INTENT } = require('./enums');
-const { expandLocation } = require('./geo');
+const { locationFilter, normalize } = require('./geo');
 const log = require('../lib/logger');
 
 /**
@@ -145,20 +145,21 @@ async function findByWaId(waId) {
 function applyFilters(q, filters = {}) {
   if (filters.sector) q = q.eq('sector', filters.sector);
   if (filters.city) {
-    // Expand a city OR a state/region into all the substring terms that should
-    // match. "Kerala" → kerala, kochi, cochin, thiruvananthapuram, … so a Kochi
-    // founder is found even though `city` never says "Kerala". Falls back to the
-    // raw term for places we haven't mapped.
-    const { terms } = expandLocation(filters.city);
-    const list = (terms.length ? terms : [String(filters.city).toLowerCase()])
-      .filter((t) => t && !/[,()]/.test(t)); // commas/parens would break the or() filter
-    if (list.length === 1) {
-      q = q.ilike('city', `%${list[0]}%`);
-    } else if (list.length > 1) {
-      q = q.or(list.map((t) => `city.ilike.*${t}*`).join(','));
+    // A state/region resolves to the native `state` column (exact, reliable, and
+    // covers every founder in that state). A specific city resolves to substring
+    // matches on the clean `city` column. Replaces the old "expand a state into 20
+    // city-substring guesses" workaround now that `state` is a real field.
+    const loc = locationFilter(filters.city);
+    if (loc.kind === 'state' && loc.states.length) {
+      q = q.or(loc.states.map((s) => `state.ilike."${s}"`).join(','));
+    } else {
+      const terms = (loc.terms && loc.terms.length ? loc.terms : [normalize(filters.city)]).filter(
+        (t) => t && !/[,()]/.test(t),
+      );
+      if (terms.length === 1) q = q.ilike('city', `%${terms[0]}%`);
+      else if (terms.length > 1) q = q.or(terms.map((t) => `city.ilike.*${t}*`).join(','));
     }
-    // DEBUG=1 shows how a city/state expanded - the Kerala-returns-2 class of bug.
-    log.debug('city expand', JSON.stringify(filters.city), '→', JSON.stringify(list));
+    log.debug('location filter', JSON.stringify(filters.city), '->', JSON.stringify(loc));
   }
   if (Number.isInteger(filters.cohort)) q = q.eq('cohort', filters.cohort);
   if (filters.program) q = q.eq('program', filters.program);
@@ -169,7 +170,9 @@ function applyFilters(q, filters = {}) {
   }
   // Skills: OR semantics - a founder matching ANY listed skill is relevant.
   if (Array.isArray(filters.skills) && filters.skills.length) {
-    const skillTerms = filters.skills.map((t) => String(t).toLowerCase().trim()).filter(Boolean);
+    const skillTerms = filters.skills
+      .map((t) => String(t).toLowerCase().trim())
+      .filter((t) => t && !/[,()]/.test(t)); // strip chars that would break the or() filter
     if (skillTerms.length === 1) {
       q = q.ilike('search_blob', `%${skillTerms[0]}%`);
     } else if (skillTerms.length > 1) {

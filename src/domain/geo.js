@@ -360,7 +360,10 @@ const ALL_KNOWN = new Set([
  * next. Returns the matched key, or null.
  */
 function closestKnown(token) {
-  if (!token || token.length < 4 || token.includes(' ')) return null;
+  // Min length 5: shorter tokens (e.g. "male", the Maldives capital) sit 1 edit
+  // from obscure Indian towns ("mahe") and would mis-correct. State/region and
+  // real-city queries no longer depend on fuzzy, so this only trims noise.
+  if (!token || token.length < 5 || token.includes(' ')) return null;
   if (ALL_KNOWN.has(token)) return token;
   const maxDist = token.length > 6 ? 2 : 1;
   let best = null;
@@ -450,12 +453,77 @@ function blobLocationTokens(cityRaw) {
   return Array.from(tokens);
 }
 
+// ─── State-column-aware resolution (uses the native `state` field) ─────────────
+// Title-case a canonical lowercase state ("tamil nadu" -> "Tamil Nadu"), keeping
+// the small joiner lowercase to mirror the API's "Jammu and Kashmir".
+function titleState(s) {
+  return String(s)
+    .split(' ')
+    .map((w) => (w === 'and' ? 'and' : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(' ');
+}
+
+/**
+ * Resolve a founder's city to its state (Title Case), for backfilling the ~8% of
+ * source rows whose `state` is null. Returns null for unknown/foreign cities
+ * (those keep whatever `state` the API gave, if any).
+ */
+function stateForCity(cityRaw) {
+  let q = normalize(cityRaw);
+  if (!q) return null;
+  if (INPUT_ALIASES[q]) q = INPUT_ALIASES[q];
+  const st = CITY_STATE[q];
+  return st ? titleState(st) : null;
+}
+
+const NCR_KEYS = new Set(['ncr', 'delhi ncr', 'national capital region']);
+const NCR_CITIES = ['delhi', 'new delhi', 'gurugram', 'gurgaon', 'noida', 'greater noida', 'ghaziabad', 'faridabad'];
+
+/**
+ * Classify a free-text location into how it should be filtered now that founders
+ * carry a normalized `state` column:
+ *   { kind:'state', states:[...] }  -> filter on the state column (a single
+ *       state, a state code, or a multi-state zone like "South India")
+ *   { kind:'city',  terms:[...] }   -> substring match on the city column
+ *       (a specific city + its spelling/old-name variants, or NCR's city cluster)
+ *   { kind:'literal', terms:[q] }   -> unknown input, match city literally
+ * Prefers exact state/city over the old "expand a state into 20 city guesses".
+ */
+function locationFilter(text) {
+  let q = normalize(text);
+  if (!q) return { kind: 'none', terms: [] };
+  if (INPUT_ALIASES[q]) q = INPUT_ALIASES[q];
+
+  const asState = (name) => ({ kind: 'state', states: [titleState(name)] });
+
+  if (ZONE_STATES[q]) return { kind: 'state', states: ZONE_STATES[q].map(titleState) };
+  if (NCR_KEYS.has(q)) return { kind: 'city', terms: NCR_CITIES.slice() };
+  if (STATES.has(q)) return asState(q);
+  if (STATE_ALIASES[q]) return asState(STATE_ALIASES[q]);
+  if (ALIAS_LOOKUP[q]) return { kind: 'city', terms: Array.from(new Set([q, ...ALIAS_LOOKUP[q]])) };
+  if (CITY_STATE[q]) return { kind: 'city', terms: [q] };
+
+  // Typo correction as a last resort (min length 5, unambiguous).
+  const c = closestKnown(q);
+  if (c && c !== q) {
+    if (ZONE_STATES[c]) return { kind: 'state', states: ZONE_STATES[c].map(titleState) };
+    if (STATES.has(c)) return asState(c);
+    if (STATE_ALIASES[c]) return asState(STATE_ALIASES[c]);
+    if (ALIAS_LOOKUP[c]) return { kind: 'city', terms: Array.from(new Set([c, ...ALIAS_LOOKUP[c]])) };
+    if (CITY_STATE[c]) return { kind: 'city', terms: [c] };
+  }
+
+  return { kind: 'literal', terms: [q] };
+}
+
 module.exports = {
   normalize,
   editDistance,
   closestKnown,
   expandLocation,
   blobLocationTokens,
+  stateForCity,
+  locationFilter,
   CITY_STATE,
   STATE_TO_CITIES,
 };

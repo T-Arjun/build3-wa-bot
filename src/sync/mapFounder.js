@@ -18,15 +18,16 @@ function toTimestamp(v) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-const { blobLocationTokens } = require('../domain/geo');
+const { blobLocationTokens, stateForCity } = require('../domain/geo');
 
-function buildSearchBlob(src) {
+function buildSearchBlob(src, state) {
   return [
     src.name,
     src.startupName,
     src.startupIdea,
     src.sector,
     src.city,
+    state,
     src.program,
     src.dharma,
     ...arr(src.skills),
@@ -42,10 +43,13 @@ function buildSearchBlob(src) {
 }
 
 function mapFounder(src) {
+  // Prefer the API's normalized state; backfill from city for legacy rows that
+  // predate it (so state-based search covers everyone, not just recent cohorts).
+  const state = src.state || stateForCity(src.city);
   return {
     source_slug: src.slug,
     origin: 'synced',
-    search_blob: buildSearchBlob(src),
+    search_blob: buildSearchBlob(src, state),
 
     name: src.name || '(unnamed)',
     phone: src.phonePublic ? src.phone || null : null,
@@ -53,6 +57,7 @@ function mapFounder(src) {
 
     cohort: Number.isInteger(src.cohort) ? src.cohort : null,
     city: src.city || null,
+    state: state || null,
     program: src.program || null,
 
     dharma: src.dharma || null,

@@ -146,7 +146,10 @@ function markRead(messageId) {
 }
 
 function truncate(s, n) {
-  s = String(s == null ? '' : s);
+  // Hard guarantee of the no-em-dash rule on EVERY outgoing string (the model
+  // occasionally emits one despite the prompt). Collapse em/en dashes + their
+  // surrounding spaces to a comma, which reads naturally in chat.
+  s = String(s == null ? '' : s).replace(/\s*[—–]\s*/g, ', ');
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 

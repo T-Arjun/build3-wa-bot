@@ -9,9 +9,9 @@ const { sendOutbox } = require('./sendOutbox');
 const { resolveTypedSelection } = require('./ordinal');
 const { pushProfile, pushSherpaCard } = require('./tools');
 const { areaLabel } = require('../domain/sherpaAreas');
+const { untrackedNote } = require('./guards');
 const fmt = require('./format');
 const wa = require('../whatsapp/cloudApi');
-const { INTRO } = require('../lib/constants');
 const log = require('../lib/logger');
 
 const MATCH_PAGE = 3;
@@ -65,13 +65,10 @@ async function handleEvent(ev) {
     if (handled) return;
   }
 
-  // 2) Conversational turn.
+  // 2) Conversational turn. (No standalone beta-disclaimer bubble: Bo greets
+  // warmly on first contact per the system prompt, and the beta note rides as the
+  // footer on interactive messages, so we don't lead with a scripted liability line.)
   try {
-    // One-time beta disclaimer on a user's first interaction.
-    if (!(conv.draft && conv.draft.intro_sent)) {
-      await wa.sendText(to, INTRO);
-    }
-
     const history = Array.isArray(conv.history) ? conv.history : [];
     const { outbox, finalText, state, assistantSummary } = await engine.run({
       text: ev.text || '',
@@ -84,9 +81,18 @@ async function handleEvent(ev) {
       prevMatchSlugs: (conv.draft?.match_cache || []).map((m) => m.slug),
     });
 
+    // Honesty backstop: if they tried to filter by an untracked attribute
+    // (gender/funding/hiring), guarantee the disclaimer leads the reply even if
+    // the model forgot it. Skip if the model already said it.
+    let outText = finalText;
+    const note = untrackedNote(ev.text || '');
+    if (note && !/don't (?:track|have)|can't filter/i.test(outText || '')) {
+      outText = outText ? `${note}\n\n${outText}` : `${note} Here's what I do have:`;
+    }
+
     // Conversation FIRST, then the list/cards/links below it. The model has
     // already seen the tool result, so its lead-in frames what's about to appear.
-    if (finalText) await wa.sendText(to, finalText);
+    if (outText) await wa.sendText(to, outText);
     const sendResults = await sendOutbox(to, outbox);
     const allSent = sendResults.every((r) => r.ok);
 

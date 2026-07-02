@@ -6,6 +6,8 @@ const {
   expandLocation,
   blobLocationTokens,
   closestKnown,
+  locationFilter,
+  stateForCity,
   CITY_STATE,
   STATE_TO_CITIES,
 } = require('../src/domain/geo');
@@ -157,4 +159,52 @@ test('blob tokens fold state + aliases into messy city strings (whole-word)', ()
 test('empty location is safe', () => {
   assert.deepStrictEqual(expandLocation('').terms, []);
   assert.deepStrictEqual(blobLocationTokens(null), []);
+});
+
+// ─── state-column-aware locationFilter (uses the native `state` field) ──────────
+
+test('a state (name or code) filters on the state column', () => {
+  for (const q of ['Kerala', 'kerala', 'KL']) {
+    const r = locationFilter(q);
+    assert.strictEqual(r.kind, 'state');
+    assert.deepStrictEqual(r.states, ['Kerala']);
+  }
+  assert.deepStrictEqual(locationFilter('MH').states, ['Maharashtra']);
+  assert.deepStrictEqual(locationFilter('Tamil Nadu').states, ['Tamil Nadu']);
+});
+
+test('a zone maps to its member states', () => {
+  const r = locationFilter('South India');
+  assert.strictEqual(r.kind, 'state');
+  assert.ok(r.states.includes('Karnataka') && r.states.includes('Kerala') && r.states.includes('Tamil Nadu'));
+});
+
+test('a specific city filters on the city column with its variants', () => {
+  const r = locationFilter('Bangalore');
+  assert.strictEqual(r.kind, 'city');
+  assert.ok(r.terms.includes('bengaluru') && r.terms.includes('bangalore'));
+  assert.ok(!r.terms.includes('mysuru')); // a city query stays that city, not its state
+  assert.deepStrictEqual(locationFilter('blr').kind, 'city');
+});
+
+test('NCR is a cross-state city cluster, not a state', () => {
+  const r = locationFilter('NCR');
+  assert.strictEqual(r.kind, 'city');
+  assert.ok(r.terms.includes('gurugram') && r.terms.includes('noida') && r.terms.includes('delhi'));
+});
+
+test('unknown / foreign short names stay literal (no fuzzy mis-correction)', () => {
+  const male = locationFilter('male'); // Maldives capital must NOT become Mahe
+  assert.strictEqual(male.kind, 'literal');
+  assert.deepStrictEqual(male.terms, ['male']);
+  assert.strictEqual(locationFilter('Dubai').kind, 'literal');
+});
+
+test('stateForCity backfills a founder city to its state (Title Case)', () => {
+  assert.strictEqual(stateForCity('Kochi'), 'Kerala');
+  assert.strictEqual(stateForCity('Bengaluru'), 'Karnataka');
+  assert.strictEqual(stateForCity('blr'), 'Karnataka');
+  assert.strictEqual(stateForCity('Chennai'), 'Tamil Nadu');
+  assert.strictEqual(stateForCity('Dubai'), null); // foreign: keep whatever the API gave
+  assert.strictEqual(stateForCity(''), null);
 });
