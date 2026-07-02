@@ -41,16 +41,25 @@ function subtitle(f) {
   // COMPANY NAME first, always - founders identify each other by startup, not
   // sector. "build3: a startup ecosystem to ena… · Kudal". Idea alone is the
   // fallback when there's no name; skills/city are last resorts.
+  // WhatsApp list rows hard-cap descriptions at 72 chars, so the "what" budget
+  // adjusts to the city length (Thiruvananthapuram must not blow the limit).
   const location = f.city || null;
+  const budget = Math.max(24, 72 - (location ? location.length + 3 : 0));
   const nameText = realText(f.startup_name);
-  const ideaText = realText(f.startup_idea);
+  let ideaText = realText(f.startup_idea);
+  // Ideas often restate the company ("XAGI Labs: XAGI Labs is an AI…") - strip
+  // the leading name so the compact row reads "XAGI Labs: an AI research…".
+  if (nameText && ideaText) {
+    const esc = nameText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    ideaText = realText(ideaText.replace(new RegExp(`^${esc}[\\s:,-]*(is\\s+)?`, 'i'), '')) || ideaText;
+  }
   let what = null;
-  if (nameText && ideaText) what = truncate(`${nameText}: ${ideaText}`, 58);
-  else if (nameText) what = nameText;
-  else if (ideaText) what = truncate(ideaText, 58);
+  if (nameText && ideaText) what = truncate(`${nameText}: ${ideaText}`, budget);
+  else if (nameText) what = truncate(nameText, budget);
+  else if (ideaText) what = truncate(ideaText, budget);
   if (what) return location ? `${what} · ${location}` : what;
   const topSkills = (f.skills || []).slice(0, 2).join(', ');
-  if (topSkills) return location ? `${topSkills} · ${location}` : topSkills;
+  if (topSkills) return truncate(location ? `${topSkills} · ${location}` : topSkills, 72);
   return location || '';
 }
 
@@ -58,11 +67,29 @@ function hasCohort(f) {
   return Number.isInteger(f.cohort) && f.cohort > 0;
 }
 
+/**
+ * Shorten a person's name to fit WhatsApp's 24-char row-title cap with dignity:
+ * drop middle names, then initial the surname ("Muralidharan Senthilkumaran" ->
+ * "Muralidharan S."), instead of letting the API chop it mid-word ("…").
+ */
+function shortName(name, max = 24) {
+  const n = String(name || '').trim();
+  if (n.length <= max) return n;
+  const parts = n.split(/\s+/);
+  if (parts.length >= 2) {
+    const firstLast = `${parts[0]} ${parts[parts.length - 1]}`;
+    if (firstLast.length <= max) return firstLast;
+    const initialed = `${parts[0]} ${parts[parts.length - 1][0]}.`;
+    if (initialed.length <= max) return initialed;
+  }
+  return truncate(n, max);
+}
+
 /** A list row for search/disambiguation results. id encodes the profile action. */
 function toRow(f) {
   return {
     id: `profile:${f.source_slug}`,
-    title: f.name,
+    title: shortName(f.name),
     description: subtitle(f) || (hasCohort(f) ? `Cohort ${f.cohort}` : ''),
   };
 }
@@ -144,7 +171,7 @@ function truncate(s, n) {
 function sherpaRow(s) {
   return {
     id: `sherpa:${s.slug}`,
-    title: s.name,
+    title: shortName(s.name),
     description: truncate(s.expertise || '', 72),
   };
 }
@@ -199,6 +226,7 @@ module.exports = {
   avatarFor,
   hiResAvatar,
   subtitle,
+  shortName,
   toRow,
   profileCaption,
   matchCaption,

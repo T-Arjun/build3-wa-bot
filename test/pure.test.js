@@ -233,3 +233,37 @@ test('withRetry does NOT retry non-transient (4xx) errors', async () => {
   );
   assert.equal(calls, 1);
 });
+
+// ─── Render-quality regressions (from the live render audit) ────────────────────
+
+test('toRow title fits WhatsApp 24-char cap with dignity, never mid-word chop', () => {
+  const fmt = require('../src/bot/format');
+  assert.strictEqual(fmt.shortName('Muralidharan Senthilkumaran'), 'Muralidharan S.');
+  assert.strictEqual(fmt.shortName('Vivek Alapuzha Prasannakumar'), 'Vivek Prasannakumar');
+  assert.strictEqual(fmt.shortName('Priya K'), 'Priya K');
+  assert.ok(fmt.shortName('Makunga Shourungthil Hurui').length <= 24);
+});
+
+test('subtitle always fits the 72-char row limit, even with long cities', () => {
+  const fmt = require('../src/bot/format');
+  const s = fmt.subtitle({
+    startup_name: 'XAGI Labs',
+    startup_idea: 'XAGI Labs is an AI research and product company building autonomous systems for everyone',
+    city: 'Thiruvananthapuram',
+  });
+  assert.ok(s.length <= 72, `too long (${s.length}): ${s}`);
+  assert.ok(s.endsWith('· Thiruvananthapuram'), s); // city never truncated away
+  assert.match(s, /^XAGI Labs: an AI research/); // company leads; no "XAGI Labs: XAGI Labs is"
+});
+
+test('subtitle leads with the company name, idea is the fallback', () => {
+  const fmt = require('../src/bot/format');
+  assert.match(fmt.subtitle({ startup_name: 'build3', startup_idea: 'a startup ecosystem', city: 'Kudal' }), /^build3: a startup ecosystem/);
+  assert.match(fmt.subtitle({ startup_name: null, startup_idea: 'solar for schools', city: 'Pune' }), /^solar for schools/);
+});
+
+test('profileCaption meta line leads with the bolded company name', () => {
+  const fmt = require('../src/bot/format');
+  const cap = fmt.profileCaption({ name: 'V', startup_name: 'build3', startup_idea: 'an ecosystem', sector: 'Education & Skilling', city: 'Kudal' });
+  assert.match(cap.split('\n')[1], /^\*build3\* · Education & Skilling · Kudal/);
+});
