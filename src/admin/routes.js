@@ -52,9 +52,13 @@ router.get('/api/conversations/:waId', async (req, res) => {
 // ─── API: clear conversation history ────────────────────────────────────────
 router.delete('/api/conversations/:waId', async (req, res) => {
   try {
+    // `focus` is NOT a top-level column - it lives inside `draft` (draft.focus,
+    // set by handler.persistDraft). Clearing draft to {} already wipes it;
+    // including a bare `focus` key here made every clear silently fail (no
+    // such column) until this fix.
     const { error } = await supabase()
       .from('conversations')
-      .update({ history: [], draft: {}, last_results: [], focus: null })
+      .update({ history: [], draft: {}, last_results: [] })
       .eq('wa_id', req.params.waId);
     if (error) return res.status(500).json({ error: error.message });
     res.json({ ok: true });
