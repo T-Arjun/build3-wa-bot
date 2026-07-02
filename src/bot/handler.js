@@ -17,10 +17,34 @@ const log = require('../lib/logger');
 const MATCH_PAGE = 3;
 
 /**
+ * Per-wa_id serialization. WhatsApp users routinely fire 2+ messages within a
+ * few seconds (impatience, or Meta redelivering); server.js dispatches each
+ * inbound event without awaiting, so without this, concurrent handleEvent
+ * calls for the SAME user each read their own stale `conv` snapshot and the
+ * later save clobbers the earlier one - lost history, stale/wrong focus,
+ * duplicated intros. This chains calls for one wa_id so only one is ever
+ * in flight at a time, while different users still run fully in parallel (no
+ * cross-user latency cost). The chain entry is deleted once it's the tail, so
+ * the map never grows unbounded across the process lifetime.
+ */
+const chains = new Map();
+
+function handleEvent(ev) {
+  const waId = ev.waId || '(unknown)';
+  const tail = chains.get(waId) || Promise.resolve();
+  const next = tail.then(() => processEvent(ev), () => processEvent(ev));
+  chains.set(waId, next);
+  next.finally(() => {
+    if (chains.get(waId) === next) chains.delete(waId);
+  });
+  return next;
+}
+
+/**
  * Handle one parsed inbound event end-to-end:
  * resolve identity → route interactive replies → else run the engine → send.
  */
-async function handleEvent(ev) {
+async function processEvent(ev) {
   const to = ev.waId;
 
   // Acknowledge immediately - blue ticks + typing bubble (one combined call)
