@@ -23,6 +23,10 @@ async function run(input) {
     self: input.self || null,
     prevMatchSlugs: input.prevMatchSlugs || [],
     focusSlug: input.focus?.slug || null,
+    // Raw text of the CURRENT turn, so a tool impl can deterministically check
+    // for intent words (e.g. "book"/"calendar") the model may have stripped out
+    // before calling the tool - see get_profile's booking-intent override.
+    rawText: input.text || '',
   };
 
   const identity = ctx.requesterSlug

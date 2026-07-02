@@ -253,6 +253,20 @@ const impls = {
 
   async get_profile(args, ctx) {
     const shownNote = SHOWN_NOTE;
+    // Deterministic override (don't rely on the model alone - it has repeatedly
+    // picked get_profile over list_sherpas for explicit booking language, e.g.
+    // "book anshu's calendar" -> get_profile("Anshu") -> disambiguated against
+    // an unrelated FOUNDER, never surfacing the actual Sherpa named Anshu).
+    // Explicit booking words mean they want a Sherpa, not a directory founder -
+    // check the Sherpa roster first and short-circuit straight to their card.
+    const bookingIntent = /\b(book(?:ing)?|calendar|schedule|slot|mentor|sherpa)\b/i.test(ctx.rawText || '');
+    if (bookingIntent && (args.name || args.slug)) {
+      const mentor = await sherpaByName(args.name || args.slug);
+      if (mentor) {
+        pushSherpaCard(ctx, mentor);
+        return { status: 'shown_sherpa', name: mentor.name, note: SHERPA_SHOWN_NOTE };
+      }
+    }
     // The person whose card is ALREADY on screen (focus) never gets re-sent:
     // answer from facts instead. Kills the "asks for similar people, receives
     // the same card again" duplicate.
