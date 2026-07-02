@@ -195,10 +195,39 @@ async function searchFounders(filters = {}, limit = 10) {
     .select(LIST_COLUMNS)
     .eq('is_published', true);
   q = applyFilters(q, filters);
-  // Over-fetch then dedupe so duplicate person records don't fill the slots.
-  const { data, error } = await q.limit(limit * 2);
+  // Over-fetch (wider when there's a free-text query, so relevance ranking has
+  // room to reorder) then dedupe so duplicate person records don't fill slots.
+  const over = filters.query ? Math.max(limit * 4, 40) : limit * 2;
+  const { data, error } = await q.limit(over);
   if (error) throw new Error(`searchFounders: ${error.message}`);
-  return dedupeFounders(data || []).slice(0, limit);
+  return rankByQuery(dedupeFounders(data || []), filters.query).slice(0, limit);
+}
+
+/**
+ * A free-text query hits `search_blob` by substring, so "loud" also matches
+ * "cloud"/"aloud" and the real match can sink to the bottom. Re-rank so the
+ * query in the startup name or person name wins, then startup idea, then the
+ * rest (blob-only, incidental substring hits). Word-boundary beats mid-word.
+ */
+function rankByQuery(rows, query) {
+  const q = String(query || '').toLowerCase().trim();
+  if (!q) return rows;
+  const wordRe = new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+  const score = (f) => {
+    const name = String(f.startup_name || '').toLowerCase();
+    const person = String(f.name || '').toLowerCase();
+    const idea = String(f.startup_idea || '').toLowerCase();
+    if (name === q) return 0;
+    if (wordRe.test(name) || wordRe.test(person)) return 1;
+    if (name.includes(q) || person.includes(q)) return 2;
+    if (wordRe.test(idea)) return 3;
+    if (idea.includes(q)) return 4;
+    return 5; // blob-only / incidental substring
+  };
+  return rows
+    .map((f, i) => ({ f, s: score(f), i }))
+    .sort((a, b) => a.s - b.s || a.i - b.i)
+    .map((x) => x.f);
 }
 
 async function countFounders(filters = {}) {
@@ -231,15 +260,33 @@ async function getBySlug(slug) {
 async function findByName(name, limit = 5) {
   const clean = String(name || '').trim();
   if (!clean) return [];
+  // Match the whole phrase OR any single name token, so "bhavana menon" still
+  // finds "Bhavana" (people give a wrong/extra surname all the time). Tokens are
+  // escaped to keep them safe inside the PostgREST or() grammar.
+  const tokens = clean
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3 && !/[,()*:"\\]/.test(t));
+  const patterns = [clean.toLowerCase(), ...tokens];
+  const orExpr = Array.from(new Set(patterns))
+    .map((p) => `name.ilike.*${p}*`)
+    .join(',');
   const { data, error } = await supabase()
     .from('founders')
     .select(LIST_COLUMNS)
     .eq('is_published', true)
-    .ilike('name', `%${clean}%`)
-    .limit(Math.max(limit * 3, 15));
+    .or(orExpr)
+    .limit(Math.max(limit * 4, 20));
   if (error) throw new Error(`findByName: ${error.message}`);
-  // Dedupe so the same person (duplicate records) isn't offered as two choices.
-  return dedupeFounders(data || []).slice(0, limit);
+  // Rank fuller-phrase matches first ("bhavana menon" -> "Bhavana Menon" beats
+  // a bare "Bhavana"), then dedupe duplicate person records.
+  const q = clean.toLowerCase();
+  const ranked = (data || []).slice().sort((a, b) => {
+    const an = String(a.name || '').toLowerCase();
+    const bn = String(b.name || '').toLowerCase();
+    return (bn.includes(q) ? 1 : 0) - (an.includes(q) ? 1 : 0);
+  });
+  return dedupeFounders(ranked).slice(0, limit);
 }
 
 /**

@@ -45,10 +45,18 @@ async function handleEvent(ev) {
   // Persist resolved identity early.
   const baseState = { founder_slug: requesterSlug };
 
-  // 1) Interactive reply routing (deterministic, no LLM).
+  // 1) Interactive reply routing (deterministic, no LLM). Wrapped so a tap can
+  // never die silently (typing indicator then nothing): on any error we tell the
+  // user instead of leaving them staring at a dead card.
   if (ev.replyId) {
-    const handled = await routeReply(ev, to, conv, baseState);
-    if (handled) return;
+    try {
+      const handled = await routeReply(ev, to, conv, baseState);
+      if (handled) return;
+    } catch (err) {
+      log.error('routeReply failed:', err.message);
+      await wa.sendText(to, 'sorry, that one glitched on our side. try again, or tell me what you need?');
+      return;
+    }
   }
 
   // 1.4) Typed selection over a mentor list ("2", "the first one") - pre-LLM.

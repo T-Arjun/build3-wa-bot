@@ -21,10 +21,25 @@ function hiResAvatar(url) {
   return url;
 }
 
+/** A brand-styled PNG placeholder avatar (WhatsApp-safe). */
+function placeholderAvatar(name) {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    name || 'build3',
+  )}&background=79c0a6&color=fff&bold=true&size=512&format=png`;
+}
+
+/**
+ * WhatsApp image messages accept jpeg/png/webp only. Meta ACCEPTS an SVG (200)
+ * then silently drops it, so the card never arrives and the tap looks dead. The
+ * source data stores SVG links as avatars for photoless founders (ui-avatars
+ * defaults to SVG, e.g. "...&size=200"), so we must normalize, not just fall
+ * back on null: any ui-avatars or .svg URL is rebuilt as our PNG placeholder.
+ */
 function avatarFor(f) {
-  if (f.avatar_url) return hiResAvatar(f.avatar_url);
-  const name = encodeURIComponent(f.name || 'build3');
-  return `https://ui-avatars.com/api/?name=${name}&background=79c0a6&color=fff&bold=true&size=512`;
+  const url = realText(f.avatar_url);
+  if (!url) return placeholderAvatar(f.name);
+  if (/ui-avatars\.com/i.test(url) || /\.svg(\?|#|$)/i.test(url)) return placeholderAvatar(f.name);
+  return hiResAvatar(url);
 }
 
 /**

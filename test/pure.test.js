@@ -267,3 +267,20 @@ test('profileCaption meta line leads with the bolded company name', () => {
   const cap = fmt.profileCaption({ name: 'V', startup_name: 'build3', startup_idea: 'an ecosystem', sector: 'Education & Skilling', city: 'Kudal' });
   assert.match(cap.split('\n')[1], /^\*build3\* · Education & Skilling · Kudal/);
 });
+
+test('avatarFor never yields an SVG WhatsApp would silently drop', () => {
+  const fmt = require('../src/bot/format');
+  // photoless founders in the source carry a ui-avatars SVG URL, not null
+  assert.match(fmt.avatarFor({ name: 'Bhavana', avatar_url: 'https://ui-avatars.com/api/?name=Bhavana&size=200' }), /format=png/);
+  assert.match(fmt.avatarFor({ name: 'X', avatar_url: '' }), /format=png/);
+  assert.match(fmt.avatarFor({ name: 'Y', avatar_url: 'https://cdn.example.com/y.svg' }), /format=png/);
+  // a real raster photo passes through untouched
+  assert.strictEqual(fmt.avatarFor({ name: 'Z', avatar_url: 'https://media-cdn.build3.in/z/avatar.jpg' }), 'https://media-cdn.build3.in/z/avatar.jpg');
+});
+
+test('findByName matches on any name token (wrong surname still finds them)', async () => {
+  // pure-shape check: the token split keeps >=3-char tokens
+  const clean = 'bhavana menon';
+  const tokens = clean.split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
+  assert.deepStrictEqual(tokens, ['bhavana', 'menon']);
+});

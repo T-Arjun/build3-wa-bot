@@ -33,6 +33,15 @@ function auditRow(f) {
   if (row.description && /(^|\s)·|·(\s*·)|·\s*$/.test(row.description.replace(/\S · \S/g, 'x'))) flag('row.desc', f.source_slug, 'dangling separator', row.description);
 }
 
+function auditAvatar(f) {
+  const url = fmt.avatarFor(f);
+  // WhatsApp drops SVG images silently (tap looks dead). The card image must be
+  // a raster format or our PNG placeholder.
+  if (/\.svg(\?|#|$)/i.test(url) || (/ui-avatars\.com/i.test(url) && !/format=png/i.test(url))) {
+    flag('avatar', f.source_slug, 'SVG/non-PNG image (WhatsApp drops it, tap dies)', url);
+  }
+}
+
 function auditProfile(f) {
   const cap = fmt.profileCaption(f);
   const lines = cap.split('\n');
@@ -69,6 +78,7 @@ function auditSherpa(s) {
     auditRow(f);
     auditProfile(f);
     auditMatch(f);
+    auditAvatar(f);
   }
   for (const s of SHERPAS) auditSherpa(s);
 
