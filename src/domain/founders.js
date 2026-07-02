@@ -29,6 +29,35 @@ function pgArray(values) {
   return `{${values.map((v) => `"${String(v).replace(/(["\\])/g, '\\$1')}"`).join(',')}}`;
 }
 
+// Short single-word terms (<=4 chars: "ai", "ar", "b2b", "saas"...) are exactly
+// the tech buzzwords founders search by, but a raw ILIKE substring match on the
+// denormalized search_blob hits them constantly by accident - "ai" alone
+// matched "Nair" (a surname), "maintain", "raised" etc, once inflating an
+// "AI founders in Mumbai" search from a real ~8 to a false 40. Word-boundary
+// regex match (PostgREST's imatch / Postgres `\y`) fixes this; longer or
+// multi-word terms keep the substring ILIKE, where false positives are rare.
+const WORD_BOUNDARY_MAX_LEN = 4;
+
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isShortWord(term) {
+  return term.length > 0 && term.length <= WORD_BOUNDARY_MAX_LEN && !/\s/.test(term);
+}
+
+/** { column, op, value } args for supabase-js .filter(), matching `term` against `col`. */
+function blobFilterArgs(col, term) {
+  return isShortWord(term)
+    ? [col, 'imatch', `\\y${escapeRegex(term)}\\y`]
+    : [col, 'ilike', `%${term}%`];
+}
+
+/** The equivalent `column.op.value` clause for a PostgREST .or() string. */
+function blobOrClause(col, term) {
+  return isShortWord(term) ? `${col}.imatch.\\y${escapeRegex(term)}\\y` : `${col}.ilike.*${term}*`;
+}
+
 // ─── Dedup (source has duplicate person records) ───────────────────────────────
 
 function linkedinHandle(url) {
@@ -176,15 +205,15 @@ function applyFilters(q, filters = {}) {
       .map((t) => String(t).toLowerCase().trim())
       .filter((t) => t && !/[,()]/.test(t)); // strip chars that would break the or() filter
     if (skillTerms.length === 1) {
-      q = q.ilike('search_blob', `%${skillTerms[0]}%`);
+      q = q.filter(...blobFilterArgs('search_blob', skillTerms[0]));
     } else if (skillTerms.length > 1) {
-      q = q.or(skillTerms.map((t) => `search_blob.ilike.*${t}*`).join(','));
+      q = q.or(skillTerms.map((t) => blobOrClause('search_blob', t)).join(','));
     }
   }
   // Free-text query is AND'd on top of skill/filter results.
   if (filters.query) {
     const clean = String(filters.query).toLowerCase().trim();
-    if (clean) q = q.ilike('search_blob', `%${clean}%`);
+    if (clean) q = q.filter(...blobFilterArgs('search_blob', clean));
   }
   return q;
 }
