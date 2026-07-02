@@ -91,7 +91,7 @@ Additional rules:
 - FACTUAL ACCURACY: Only mention "same city" if both founders literally share the same city name. If cities differ, do not reference geography at all - pick a different alignment factor instead.`;
 }
 
-function buildUserPrompt(target, candidates) {
+function buildUserPrompt(target, candidates, requiredSkills = null) {
   const targetStr = founderToPromptString(target, true);
   const candidateLines = candidates.map((c, i) => `[${i}] ${founderToPromptString(c, false)}`);
 
@@ -104,14 +104,24 @@ function buildUserPrompt(target, candidates) {
       ? 'The target founder wants to join a promising startup as a key early member.'
       : '';
 
+  // The requester's EXPLICIT ask ("a technical cofounder", "someone who can
+  // sell") overrides generic complementarity: a candidate who doesn't bring the
+  // asked-for skill must not outrank one who does. Without this, "I want a tech
+  // cofounder" can return 90/100 GTM people because they "complement" the
+  // requester - the exact inverse of the request.
+  const req = Array.isArray(requiredSkills) && requiredSkills.length ? requiredSkills : null;
+  const reqNote = req
+    ? `\nHARD REQUIREMENT: the target founder explicitly asked for a co-founder who brings: ${req.join(', ')}. A candidate who does not plausibly bring these skills must score BELOW 40 no matter how complementary they are otherwise, and their reasons must name that gap plainly instead of praising unrelated skills.`
+    : '';
+
   return `TARGET FOUNDER:
 ${targetStr}
-${seekingNote ? `\nContext: ${seekingNote}` : ''}
+${seekingNote ? `\nContext: ${seekingNote}` : ''}${reqNote}
 
 CANDIDATES (${candidates.length} total):
 ${candidateLines.join('\n')}
 
-Score every candidate. Apply the reason language rules strictly based on each score. Return JSON only.`;
+Score every candidate. Apply the reason language rules strictly based on each score. Write every reason TO the target founder in second person ("brings the sales muscle you need"), never "the target" or phrases like "non-technical target". Return JSON only.`;
 }
 
 module.exports = { buildSystemPrompt, buildUserPrompt, founderToPromptString };

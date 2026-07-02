@@ -27,16 +27,28 @@ function avatarFor(f) {
   return `https://ui-avatars.com/api/?name=${name}&background=79c0a6&color=fff&bold=true&size=512`;
 }
 
+/**
+ * Treat placeholder junk ("NA", "N/A", "-", "none", "tbd") as absent so cards
+ * never render a literal *NA* where a startup name should be.
+ */
+function realText(s) {
+  const t = String(s == null ? '' : s).trim();
+  if (!t || /^(na|n\/a|n\.a\.?|none|nil|null|tbd|-{1,3}|\.+)$/i.test(t)) return null;
+  return t;
+}
+
 function subtitle(f) {
   // Describe by what they're building, not their sector tag.
   // Priority: startup idea snippet > startup name > skills > city alone.
   const location = f.city || null;
-  if (f.startup_idea) {
-    const idea = truncate(f.startup_idea.trim(), 60);
+  const ideaText = realText(f.startup_idea);
+  if (ideaText) {
+    const idea = truncate(ideaText, 60);
     return location ? `${idea} · ${location}` : idea;
   }
-  if (f.startup_name) {
-    return location ? `${f.startup_name} · ${location}` : f.startup_name;
+  const nameText = realText(f.startup_name);
+  if (nameText) {
+    return location ? `${nameText} · ${location}` : nameText;
   }
   const topSkills = (f.skills || []).slice(0, 2).join(', ');
   if (topSkills) return location ? `${topSkills} · ${location}` : topSkills;
@@ -65,11 +77,14 @@ function profileCaption(f) {
   if (f.program) meta.push(f.program);
   if (meta.length) lines.push(meta.join(' · '));
 
-  const idea = f.startup_idea ? truncate(f.startup_idea.trim(), 300) : '';
-  if (f.startup_name || idea) {
+  const nameText = realText(f.startup_name);
+  const ideaText = realText(f.startup_idea);
+  const idea = ideaText ? truncate(ideaText, 300) : '';
+  if (nameText || idea) {
     lines.push('');
-    if (f.startup_name && idea) lines.push(`*${f.startup_name}* - ${idea}`);
-    else lines.push(`*${f.startup_name || ''}*${idea}`.trim());
+    if (nameText && idea) lines.push(`*${nameText}* - ${idea}`);
+    else if (nameText) lines.push(`*${nameText}*`);
+    else lines.push(idea);
   }
 
   if (f.startup_stage) lines.push(`Stage: ${f.startup_stage}`);
@@ -86,6 +101,7 @@ function profileCaption(f) {
 /** Compact, factual snapshot used to ground follow-up Q&A (prevents hallucination). */
 function focusFields(f) {
   return {
+    slug: f.source_slug || f.slug || null,
     name: f.name,
     sector: f.sector || null,
     city: f.city || null,
@@ -104,11 +120,13 @@ function focusFields(f) {
 function matchCaption(m) {
   const lines = [`*${m.name}* - ${m.score}/100`];
   // Lead with what they're building, then location. Sector tag is not a description.
-  if (m.startup_idea) {
-    const idea = truncate(m.startup_idea.trim(), 80);
+  const ideaText = realText(m.startup_idea);
+  const nameText = realText(m.startup_name);
+  if (ideaText) {
+    const idea = truncate(ideaText, 80);
     lines.push(m.city ? `${idea} · ${m.city}` : idea);
-  } else if (m.startup_name) {
-    lines.push(m.city ? `${m.startup_name} · ${m.city}` : m.startup_name);
+  } else if (nameText) {
+    lines.push(m.city ? `${nameText} · ${m.city}` : nameText);
   } else if (m.city) {
     lines.push(m.city);
   }

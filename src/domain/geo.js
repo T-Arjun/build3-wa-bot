@@ -476,6 +476,15 @@ function stateForCity(cityRaw) {
   return st ? titleState(st) : null;
 }
 
+// Country-wide / "no location" phrasings. The model sometimes passes these as a
+// city ("cofounders across India" -> city:"India"), which used to become
+// city ilike %india% -> 0 rows -> a false "nobody in all of India". They mean
+// "don't filter by location at all".
+const COUNTRY_WIDE = new Set([
+  'india', 'all india', 'all of india', 'pan india', 'across india', 'whole india',
+  'anywhere', 'anywhere in india', 'bharat', 'nationwide', 'remote', 'any city', 'any',
+]);
+
 const NCR_KEYS = new Set(['ncr', 'delhi ncr', 'national capital region']);
 const NCR_CITIES = ['delhi', 'new delhi', 'gurugram', 'gurgaon', 'noida', 'greater noida', 'ghaziabad', 'faridabad'];
 
@@ -496,6 +505,7 @@ function locationFilter(text) {
 
   const asState = (name) => ({ kind: 'state', states: [titleState(name)] });
 
+  if (COUNTRY_WIDE.has(q)) return { kind: 'none', terms: [] };
   if (ZONE_STATES[q]) return { kind: 'state', states: ZONE_STATES[q].map(titleState) };
   if (NCR_KEYS.has(q)) return { kind: 'city', terms: NCR_CITIES.slice() };
   if (STATES.has(q)) return asState(q);

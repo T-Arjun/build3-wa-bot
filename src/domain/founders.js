@@ -150,7 +150,9 @@ function applyFilters(q, filters = {}) {
     // matches on the clean `city` column. Replaces the old "expand a state into 20
     // city-substring guesses" workaround now that `state` is a real field.
     const loc = locationFilter(filters.city);
-    if (loc.kind === 'state' && loc.states.length) {
+    if (loc.kind === 'none') {
+      // "India" / "anywhere" / "remote": explicitly NOT a location constraint.
+    } else if (loc.kind === 'state' && loc.states.length) {
       q = q.or(loc.states.map((s) => `state.ilike."${s}"`).join(','));
     } else {
       const terms = (loc.terms && loc.terms.length ? loc.terms : [normalize(filters.city)]).filter(

@@ -107,6 +107,15 @@ const definitions = [
   {
     type: 'function',
     function: {
+      name: 'send_prep_doc',
+      description:
+        'Send the mentor-session prep doc link (plus the post-call feedback form link) to the user. Call this whenever they ask for the prep doc, what to prepare, or how to get ready for a mentor call. Never describe or promise the doc without calling this.',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_sherpa',
       description:
         "Show one mentor's profile card with their booking link and the prep-doc / feedback reminders. Use the slug from a list_sherpas result.",
@@ -153,24 +162,74 @@ const SHOWN_NOTE =
   'The full profile card (photo + startup, sector, city, skills, LinkedIn) has ALREADY been sent to the user. Do NOT offer to show the profile again. Keep any text to a one-line confirmation; you may offer "similar founders".';
 
 const LIST_SHOWN_NOTE =
-  'Your text reply is sent FIRST, then the interactive list/cards appear right below it. Write a warm, helpful lead-in (1-2 short sentences, build3 tone) that frames what they are about to see and invites them to tap. Do NOT enumerate or repeat the names/items - the list already shows them; repeating them is the mistake to avoid.';
+  'Your text reply is sent FIRST, then the interactive list/cards appear right below it. Write a warm, helpful lead-in (1-2 short sentences, build3 tone) that frames what they are about to see and invites them to tap. Do NOT enumerate or repeat the names/items - the list already shows them; repeating them is the mistake to avoid. IMPORTANT: if the user\'s message also asked something ELSE besides this search (another question or need), answer that part too in the same reply, even in one line; never silently drop a part of their message.';
 
 /** Tool implementations. Each receives (args, ctx) and returns a summary object for the model. */
 const impls = {
   async search_founders(args, ctx) {
-    const filters = toFilters(args);
-    const count = await founders.countFounders(filters);
-    if (count === 0) return { status: 'none' };
+    let filters = toFilters(args);
+    let count = await founders.countFounders(filters);
+    let broadened = null;
+    if (count === 0) {
+      // Deterministic auto-broadening: a narrow combo (city that described the
+      // USER, or long free-text) must not become a false "nobody in the
+      // community". Drop the narrowest constraint first and retry, so the user
+      // gets "none in Jaipur, but across India:" instead of three dead ends.
+      const attempts = [];
+      if (filters.city) attempts.push({ alt: { ...filters, city: undefined }, dropped: `the "${filters.city}" location filter` });
+      if (filters.query) attempts.push({ alt: { ...filters, query: undefined }, dropped: `the "${filters.query}" keyword` });
+      if (filters.city && filters.query) {
+        attempts.push({ alt: { ...filters, city: undefined, query: undefined }, dropped: `both the "${filters.city}" location and the "${filters.query}" keyword` });
+      }
+      for (const { alt, dropped } of attempts) {
+        if (!hasAnyFilter(alt)) continue; // never silently widen to the whole directory
+        const c = await founders.countFounders(alt);
+        if (c > 0) {
+          filters = alt;
+          count = c;
+          broadened = dropped;
+          break;
+        }
+      }
+      if (count === 0) {
+        // A short query that matches a mentor's name ("arvind") means they were
+        // probably asking for a person who is a Sherpa, not a founder.
+        if (args.query && String(args.query).trim().split(/\s+/).length <= 2) {
+          const mentor = await sherpaByName(args.query);
+          if (mentor) {
+            pushSherpaCard(ctx, mentor);
+            return { status: 'shown_mentor', name: mentor.name, note: SHERPA_SHOWN_NOTE };
+          }
+        }
+        return {
+          status: 'none',
+          note:
+            'Nothing matched even after broadening. Say "nothing under that exact search" and offer the nearest pivot (adjacent sector, all of India). NEVER claim the community has no such founders; you searched a phrase, not the community.',
+        };
+      }
+    }
     if (count > TOO_BROAD && !hasAnyFilter(filters)) {
       return { status: 'too_broad', count };
     }
-    const results = await founders.searchFounders(filters, 10);
+    let results = await founders.searchFounders(filters, 10);
+    // "People like the person on screen" must not return that same person.
+    if (ctx.focusSlug && results.length > 1) {
+      const before = results.length;
+      results = results.filter((f) => f.source_slug !== ctx.focusSlug);
+      if (results.length < before) count = Math.max(results.length, count - 1);
+    }
     // Exactly one founder → show the profile directly. A 1-row "tap to view" list
     // is clunky, and this also covers the case where duplicate rows dedupe to one.
     if (results.length === 1) {
       pushProfile(ctx, results[0]);
       ctx.state.focus = fmt.focusFields(results[0]);
-      return { status: 'shown', name: results[0].name, facts: ctx.state.focus, note: SHOWN_NOTE };
+      return {
+        status: 'shown',
+        name: results[0].name,
+        facts: ctx.state.focus,
+        ...(broadened ? { broadened: `The exact search had zero results; this person comes from automatically dropping ${broadened}. Say so plainly.` } : {}),
+        note: SHOWN_NOTE,
+      };
     }
     ctx.outbox.push({
       kind: 'list',
@@ -180,7 +239,13 @@ const impls = {
     });
     ctx.state.last_results = results.map((f) => f.source_slug);
     ctx.state.topic_changed = true;
-    return { status: 'ok', count, shown: results.length, note: LIST_SHOWN_NOTE };
+    return {
+      status: 'ok',
+      count,
+      shown: results.length,
+      ...(broadened ? { broadened: `The exact search had zero results, so this list comes from automatically dropping ${broadened}. Tell the user plainly in your lead-in (e.g. "none in Jaipur specifically, but across the community:").` } : {}),
+      note: LIST_SHOWN_NOTE,
+    };
   },
 
   async get_profile(args, ctx) {
@@ -193,7 +258,16 @@ const impls = {
       return { status: 'shown', name: f.name, facts: ctx.state.focus, note: shownNote };
     }
     const matches = await founders.findByName(args.name || '', 5);
-    if (matches.length === 0) return { status: 'none', query: args.name };
+    if (matches.length === 0) {
+      // Not a founder - but it may be one of the 13 mentors ("that Arvind guy").
+      // Never tell the user a person "doesn't exist" when they're a Sherpa.
+      const mentor = await sherpaByName(args.name);
+      if (mentor) {
+        pushSherpaCard(ctx, mentor);
+        return { status: 'shown_mentor', name: mentor.name, note: SHERPA_SHOWN_NOTE };
+      }
+      return { status: 'none', query: args.name };
+    }
     if (matches.length === 1) {
       pushProfile(ctx, matches[0]);
       ctx.state.focus = fmt.focusFields(matches[0]);
@@ -324,10 +398,33 @@ const impls = {
     pushSherpaCard(ctx, s);
     return { status: 'shown', name: s.name, booking_url: s.booking_url, note: SHERPA_SHOWN_NOTE };
   },
+
+  async send_prep_doc(args, ctx) {
+    ctx.outbox.push({ kind: 'text', body: fmt.prepMessage() });
+    return {
+      status: 'sent',
+      note: 'The prep-doc link and the post-call feedback link have been sent as a message right below yours. Confirm in one warm line; do NOT restate or re-list the links.',
+    };
+  },
 };
 
 const SHERPA_SHOWN_NOTE =
   "Your text reply is sent FIRST, then the mentor's card, a 'Book a slot' button that opens their calendar directly, and a Prep doc / More mentors row appear right below it. Open with a warm, helpful lead-in (1-2 short sentences, build3 tone): affirm it's a solid pick and tell them to tap Book a slot to pick a time. Do NOT repeat the mentor's details or list other mentors.";
+
+/**
+ * Resolve a person-name mention to exactly one mentor, or null. Guards the
+ * "that Arvind guy doesn't exist" failure: a name that misses the founder
+ * directory is checked against the Sherpas before anyone says "not found".
+ */
+async function sherpaByName(name) {
+  const nameLc = String(name || '').toLowerCase().trim();
+  const firstToken = nameLc.split(/\s+/)[0] || '';
+  if (!firstToken) return null;
+  const hits = (await sherpas.searchByExpertise(nameLc)).filter((s) =>
+    s.name.toLowerCase().includes(firstToken),
+  );
+  return hits.length === 1 ? hits[0] : null;
+}
 
 function pushProfile(ctx, f) {
   ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(f), caption: fmt.profileCaption(f) });

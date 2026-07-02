@@ -130,7 +130,7 @@ async function findCofounders(filters = {}, requesterSlug = null, self = null) {
 
   const target = buildTarget(requester, filters, effectiveSelf);
   const system = buildSystemPrompt();
-  const user = buildUserPrompt(target, candidates);
+  const user = buildUserPrompt(target, candidates, filters.skills);
 
   let parsed;
   try {
