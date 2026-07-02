@@ -290,7 +290,9 @@ async function findByName(name, limit = 5) {
   if (deduped.length) return deduped.slice(0, limit);
   // Nothing matched by substring: try a typo-tolerant pass ("umaier" -> "Umair
   // Tariq"). Only when exact/substring found nothing, so it never degrades a
-  // good match.
+  // good match. Fuzzy results are a GUESS, not a confirmed match - tagged
+  // `_fuzzy` so the caller confirms with the user instead of asserting it as
+  // fact (a wrong confident answer is worse than asking "did you mean X?").
   return fuzzyByName(tokens.length ? tokens : [q], limit);
 }
 
@@ -325,6 +327,8 @@ async function fuzzyByName(queryTokens, limit) {
     if (best !== Infinity) scored.push({ f, d: best });
   }
   scored.sort((a, b) => a.d - b.d);
+  // Tag every candidate as a guess (see findByName) before dedupe/return.
+  for (const { f } of scored) f._fuzzy = true;
   return dedupeFounders(scored.map((x) => x.f)).slice(0, limit);
 }
 

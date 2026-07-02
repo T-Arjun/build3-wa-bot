@@ -284,20 +284,30 @@ const impls = {
       }
       return { status: 'none', query: args.name };
     }
-    if (matches.length === 1) {
+    // A fuzzy/typo-corrected match is a GUESS, never a confirmed identity -
+    // even when there's only one candidate. Always confirm before asserting
+    // facts about a person we're not sure is who they meant (a confident wrong
+    // answer is worse than one extra tap). Exact/substring matches are trusted
+    // and still auto-show when there's exactly one.
+    const isGuess = matches.every((f) => f._fuzzy);
+    if (matches.length === 1 && !isGuess) {
       pushProfile(ctx, matches[0]);
       ctx.state.focus = fmt.focusFields(matches[0]);
       return { status: 'shown', name: matches[0].name, facts: ctx.state.focus, note: shownNote };
     }
-    ctx.outbox.push({
-      kind: 'list',
-      body: 'found a couple of people - which one did you mean?',
-      button: 'Choose',
-      rows: matches.map(fmt.toRow),
-    });
+    const body =
+      isGuess && matches.length === 1
+        ? `did you mean ${matches[0].name}?`
+        : isGuess
+          ? "didn't find an exact match - did you mean one of these?"
+          : 'found a couple of people - which one did you mean?';
+    ctx.outbox.push({ kind: 'list', body, button: 'Choose', rows: matches.map(fmt.toRow) });
     return {
       status: 'ambiguous',
       candidates: matches.map((f) => `${f.name} (${fmt.subtitle(f) || 'no details'})`),
+      note: isGuess
+        ? 'These are spelling-guess candidates for a name that had no exact match, NOT confirmed. Your reply must ask "did you mean X?" (or list the guesses) - never assert facts about them yet.'
+        : undefined,
     };
   },
 
