@@ -13,6 +13,7 @@
     "sync": "node src/sync/runSync.js",
     "sync:dry": "node src/sync/runSync.js --dry-run",
     "audit:render": "node scripts/render_audit.js",
+    "audit:assets": "node scripts/asset_audit.js",
     "test": "node --test"
   },
   "keywords": [

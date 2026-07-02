@@ -35,10 +35,15 @@ function placeholderAvatar(name) {
  * defaults to SVG, e.g. "...&size=200"), so we must normalize, not just fall
  * back on null: any ui-avatars or .svg URL is rebuilt as our PNG placeholder.
  */
+// Hosts WhatsApp/Meta cannot fetch as an image: SVG generators, and LinkedIn's
+// CDN which 403s hotlinks. Any of these -> our PNG placeholder so the card
+// always renders (the source rehosts most photos to media-cdn.build3.in; these
+// are the stragglers that would otherwise die on tap).
+const UNUSABLE_AVATAR = /ui-avatars\.com|media\.licdn\.com|\.svg(\?|#|$)/i;
+
 function avatarFor(f) {
   const url = realText(f.avatar_url);
-  if (!url) return placeholderAvatar(f.name);
-  if (/ui-avatars\.com/i.test(url) || /\.svg(\?|#|$)/i.test(url)) return placeholderAvatar(f.name);
+  if (!url || UNUSABLE_AVATAR.test(url)) return placeholderAvatar(f.name);
   return hiResAvatar(url);
 }
 
