@@ -291,7 +291,7 @@ const impls = {
     }
     ctx.outbox.push({
       kind: 'list',
-      body: `found a few - which ${args.name}?`,
+      body: 'found a couple of people - which one did you mean?',
       button: 'Choose',
       rows: matches.map(fmt.toRow),
     });
