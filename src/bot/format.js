@@ -38,18 +38,17 @@ function realText(s) {
 }
 
 function subtitle(f) {
-  // Describe by what they're building, not their sector tag.
-  // Priority: startup idea snippet > startup name > skills > city alone.
+  // COMPANY NAME first, always - founders identify each other by startup, not
+  // sector. "build3: a startup ecosystem to ena… · Kudal". Idea alone is the
+  // fallback when there's no name; skills/city are last resorts.
   const location = f.city || null;
-  const ideaText = realText(f.startup_idea);
-  if (ideaText) {
-    const idea = truncate(ideaText, 60);
-    return location ? `${idea} · ${location}` : idea;
-  }
   const nameText = realText(f.startup_name);
-  if (nameText) {
-    return location ? `${nameText} · ${location}` : nameText;
-  }
+  const ideaText = realText(f.startup_idea);
+  let what = null;
+  if (nameText && ideaText) what = truncate(`${nameText}: ${ideaText}`, 58);
+  else if (nameText) what = nameText;
+  else if (ideaText) what = truncate(ideaText, 58);
+  if (what) return location ? `${what} · ${location}` : what;
   const topSkills = (f.skills || []).slice(0, 2).join(', ');
   if (topSkills) return location ? `${topSkills} · ${location}` : topSkills;
   return location || '';
@@ -72,19 +71,18 @@ function toRow(f) {
 function profileCaption(f) {
   const lines = [`*${f.name}*`];
 
-  const meta = [f.sector, f.city].filter(Boolean);
+  // Company name LEADS the meta line - it's how founders identify each other.
+  const nameText = realText(f.startup_name);
+  const meta = [nameText ? `*${nameText}*` : null, f.sector, f.city].filter(Boolean);
   if (hasCohort(f)) meta.push(`Cohort ${f.cohort}`);
   if (f.program) meta.push(f.program);
   if (meta.length) lines.push(meta.join(' · '));
 
-  const nameText = realText(f.startup_name);
   const ideaText = realText(f.startup_idea);
-  const idea = ideaText ? truncate(ideaText, 300) : '';
-  if (nameText || idea) {
+  // The company name already leads the meta line; the body is just the idea.
+  if (ideaText) {
     lines.push('');
-    if (nameText && idea) lines.push(`*${nameText}* - ${idea}`);
-    else if (nameText) lines.push(`*${nameText}*`);
-    else lines.push(idea);
+    lines.push(truncate(ideaText, 300));
   }
 
   if (f.startup_stage) lines.push(`Stage: ${f.startup_stage}`);
@@ -119,14 +117,15 @@ function focusFields(f) {
 /** A single cofounder match block (used when sent as an image card caption). */
 function matchCaption(m) {
   const lines = [`*${m.name}* - ${m.score}/100`];
-  // Lead with what they're building, then location. Sector tag is not a description.
+  // Company name leads, then what they're building, then location.
   const ideaText = realText(m.startup_idea);
   const nameText = realText(m.startup_name);
-  if (ideaText) {
+  if (nameText) {
+    lines.push(m.city ? `*${nameText}* · ${m.city}` : `*${nameText}*`);
+    if (ideaText) lines.push(truncate(ideaText, 80));
+  } else if (ideaText) {
     const idea = truncate(ideaText, 80);
     lines.push(m.city ? `${idea} · ${m.city}` : idea);
-  } else if (nameText) {
-    lines.push(m.city ? `${nameText} · ${m.city}` : nameText);
   } else if (m.city) {
     lines.push(m.city);
   }
