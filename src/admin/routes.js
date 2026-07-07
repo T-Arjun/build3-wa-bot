@@ -473,19 +473,44 @@ async function loadThread(waId) {
   const draft = conv.draft || {};
   const num = formatNum(waId);
   const count = Array.isArray(messages) ? messages.length : 0;
+  const legacyCount = Array.isArray(conv.history) ? conv.history.length : 0;
+  const countLabel = count ? \`\${count} messages\` : legacyCount ? \`\${legacyCount} messages (legacy)\` : '0 messages';
 
   document.getElementById('threadHeader').innerHTML = \`
     <div class="thread-info">
       <div class="thread-num">\${esc(num)}</div>
       <div class="thread-meta">
-        Last active \${relTime(conv.last_message_at)} &nbsp;·&nbsp; \${count} messages
+        Last active \${relTime(conv.last_message_at)} &nbsp;·&nbsp; \${countLabel}
         \${conv.founder_slug ? \` &nbsp;·&nbsp; <span style="color:#6366f1">\${esc(conv.founder_slug)}</span>\` : ''}
       </div>
     </div>
     <button class="btn danger" onclick="clearConv('\${escJs(waId)}', event)">✕ Clear state</button>\`;
 
   const body = document.getElementById('threadBody');
-  if (!count) {
+  const legacyHist = Array.isArray(conv.history) ? conv.history : [];
+  if (!count && legacyHist.length) {
+    // message_log has nothing for this wa_id - either nothing has happened
+    // since this table was added, or (as with the conversation that prompted
+    // building this table) all of it predates the fix and was only ever kept
+    // in the 10-entry-capped, flattened conversations.history. That data is
+    // still real - show it rather than a blank screen, clearly labeled as a
+    // partial, pre-fix view so it's not mistaken for the full conversation.
+    const parts = [\`<div class="day-sep">legacy - last \${legacyHist.length} exchanges only, richer logging starts from now</div>\`];
+    for (const h of legacyHist) {
+      const isOut = h.role === 'assistant';
+      let text = h.content || '';
+      const noteMatch = text.match(/^\\(internal note[^-]*- ([^)]*)\\)\\s*/);
+      let note = '';
+      if (noteMatch) {
+        note = noteMatch[1];
+        text = text.slice(noteMatch[0].length);
+      }
+      const inner = (note ? \`<div class="caption">📌 \${esc(note)}</div>\` : '') + (text ? esc(text) : '');
+      parts.push(\`<div class="msg \${isOut ? 'bot' : 'user'}"><div class="bubble">\${inner || esc('(no text)')}</div></div>\`);
+    }
+    body.innerHTML = parts.join('');
+    body.scrollTop = body.scrollHeight;
+  } else if (!count) {
     body.innerHTML = '<div class="empty">No messages yet</div>';
   } else {
     let lastDay = null;
