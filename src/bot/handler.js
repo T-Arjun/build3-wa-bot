@@ -99,7 +99,12 @@ async function processEvent(ev) {
   // Full-fidelity audit log (unbounded, independent of the 10-entry-capped
   // conversations.history) - covers typed text AND interactive taps, since
   // parseInbound already puts the tapped title into ev.text either way.
-  messageLog.logInbound(to, ev);
+  // MUST be awaited: the outbound reply's log rows are also awaited later in
+  // this function, so an unawaited inbound insert can race them over the
+  // network and land with a HIGHER id than the reply that answers it -
+  // scrambling the /messages id-ordered dashboard exactly like the bug this
+  // table was built to fix.
+  await messageLog.logInbound(to, ev);
 
   const conv = await getConversation(to);
   const founder = await founders.findByWaId(to);
