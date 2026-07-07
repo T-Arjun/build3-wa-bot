@@ -5,7 +5,8 @@ const engine = require('./engine');
 const founders = require('../domain/founders');
 const sherpas = require('../domain/sherpas');
 const { getConversation, saveConversation } = require('./conversation');
-const { sendOutbox } = require('./sendOutbox');
+const { sendOutbox: sendOutboxRaw } = require('./sendOutbox');
+const messageLog = require('../domain/messageLog');
 const { resolveTypedSelection } = require('./ordinal');
 const { pushProfile, pushSherpaCard } = require('./tools');
 const { areaLabel } = require('../domain/sherpaAreas');
@@ -15,6 +16,40 @@ const wa = require('../whatsapp/cloudApi');
 const log = require('../lib/logger');
 
 const MATCH_PAGE = 3;
+
+/**
+ * Thin logging wrappers around the two real send paths (wa.sendText directly,
+ * and the rich sendOutbox specs) so EVERY outbound message - regardless of
+ * which branch sent it - lands in the full-fidelity message_log, independent
+ * of the 10-entry-capped conversations.history used for LLM context.
+ */
+async function sendText(to, body) {
+  let ok = true;
+  try {
+    await wa.sendText(to, body);
+  } catch (err) {
+    ok = false;
+    throw err;
+  } finally {
+    // Log on failure too - a send that never reached WhatsApp still needs a
+    // row (tagged ok=false) so the admin dashboard can show it as failed
+    // instead of silently having no record at all.
+    await messageLog.logOutbound(to, { kind: 'text', body }, ok);
+  }
+}
+
+async function sendOutbox(to, outbox) {
+  const results = await sendOutboxRaw(to, outbox);
+  // Logged sequentially (not Promise.all) so message_log rows get inserted in
+  // the SAME order sendOutboxRaw actually sent them - sendOutboxRaw itself
+  // sends one spec at a time, awaited, so a concurrent Promise.all here could
+  // let a later spec's row land (and get an earlier created_at/id) before an
+  // earlier spec's row, scrambling the admin dashboard's rendered order.
+  for (let i = 0; i < outbox.length; i++) {
+    await messageLog.logOutbound(to, outbox[i], results[i]?.ok !== false);
+  }
+  return results;
+}
 
 /**
  * Per-wa_id serialization. WhatsApp users routinely fire 2+ messages within a
@@ -61,6 +96,11 @@ async function processEvent(ev) {
     return;
   }
 
+  // Full-fidelity audit log (unbounded, independent of the 10-entry-capped
+  // conversations.history) - covers typed text AND interactive taps, since
+  // parseInbound already puts the tapped title into ev.text either way.
+  messageLog.logInbound(to, ev);
+
   const conv = await getConversation(to);
   const founder = await founders.findByWaId(to);
   const requesterSlug = founder?.source_slug || conv.founder_slug || null;
@@ -78,7 +118,7 @@ async function processEvent(ev) {
       if (handled) return;
     } catch (err) {
       log.error('routeReply failed:', err.message);
-      await wa.sendText(to, 'sorry, that one glitched on our side. try again, or tell me what you need?');
+      await sendText(to, 'sorry, that one glitched on our side. try again, or tell me what you need?');
       return;
     }
   }
@@ -124,7 +164,7 @@ async function processEvent(ev) {
 
     // Conversation FIRST, then the list/cards/links below it. The model has
     // already seen the tool result, so its lead-in frames what's about to appear.
-    if (outText) await wa.sendText(to, outText);
+    if (outText) await sendText(to, outText);
     const sendResults = await sendOutbox(to, outbox);
     const allSent = sendResults.every((r) => r.ok);
 
@@ -142,7 +182,7 @@ async function processEvent(ev) {
     });
   } catch (err) {
     log.error('handleEvent engine error:', err.message);
-    await wa.sendText(to, "Sorry, something went wrong on my side. Try again in a moment.");
+    await sendText(to, "Sorry, something went wrong on my side. Try again in a moment.");
   }
 }
 
@@ -195,7 +235,7 @@ async function routeTypedSelection(ev, to, conv, baseState) {
   const hist = Array.isArray(conv.history) ? conv.history : [];
   const draft = { ...(conv.draft || {}), intro_sent: true };
   if (sel.sendFailed) {
-    await wa.sendText(to, "sorry, couldn't load that profile just now. try again?");
+    await sendText(to, "sorry, couldn't load that profile just now. try again?");
   } else {
     hist.push({ role: 'user', content: ev.text });
     hist.push({ role: 'assistant', content: `(internal note - already shown to the user: the profile of ${sel.founder.name})` });
@@ -230,10 +270,10 @@ async function routeReply(ev, to, conv, baseState) {
         draft.focus = fmt.focusFields(f); // so follow-ups answer from real data
       } else {
         // Card didn't reach the user - don't claim it did, and don't set focus.
-        await wa.sendText(to, "sorry, couldn't load that profile just now. try again?");
+        await sendText(to, "sorry, couldn't load that profile just now. try again?");
       }
     } else {
-      await wa.sendText(to, "hmm, we couldn't find that profile anymore.");
+      await sendText(to, "hmm, we couldn't find that profile anymore.");
     }
     await saveConversation(to, { ...baseState, history: hist.slice(-10), draft });
     return true;
@@ -244,7 +284,7 @@ async function routeReply(ev, to, conv, baseState) {
     const offset = conv.draft?.match_offset || MATCH_PAGE;
     const next = cache.slice(offset, offset + MATCH_PAGE);
     if (next.length === 0) {
-      await wa.sendText(to, "That's everyone I found. Want to try different criteria?");
+      await sendText(to, "That's everyone I found. Want to try different criteria?");
       return true;
     }
     const outbox = next.map((m) => ({
@@ -274,7 +314,7 @@ async function routeReply(ev, to, conv, baseState) {
     const list = await sherpas.listByArea(key);
     const draft = { ...(conv.draft || {}), intro_sent: true };
     if (!list.length) {
-      await wa.sendText(to, 'no Sherpas in that area right now. try another?');
+      await sendText(to, 'no Sherpas in that area right now. try another?');
     } else {
       await sendOutbox(to, [
         {
@@ -300,10 +340,10 @@ async function routeReply(ev, to, conv, baseState) {
       pushSherpaCard(ctx, s);
       const results = await sendOutbox(to, ctx.outbox);
       if (!results.every((r) => r.ok)) {
-        await wa.sendText(to, "sorry, couldn't load that sherpa just now. try again?");
+        await sendText(to, "sorry, couldn't load that sherpa just now. try again?");
       }
     } else {
-      await wa.sendText(to, "hmm, we couldn't find that sherpa anymore.");
+      await sendText(to, "hmm, we couldn't find that sherpa anymore.");
     }
     await saveConversation(to, { ...baseState, draft });
     return true;
@@ -312,13 +352,13 @@ async function routeReply(ev, to, conv, baseState) {
   if (id.startsWith('book:')) {
     const slug = id.slice('book:'.length);
     const s = await sherpas.getBySlug(slug);
-    await wa.sendText(to, s ? fmt.bookingMessage(s) : "hmm, we couldn't find that sherpa anymore.");
+    await sendText(to, s ? fmt.bookingMessage(s) : "hmm, we couldn't find that sherpa anymore.");
     await saveConversation(to, { ...baseState, draft: { ...(conv.draft || {}), intro_sent: true } });
     return true;
   }
 
   if (id.startsWith('prep:')) {
-    await wa.sendText(to, fmt.prepMessage());
+    await sendText(to, fmt.prepMessage());
     await saveConversation(to, { ...baseState, draft: { ...(conv.draft || {}), intro_sent: true } });
     return true;
   }
@@ -348,7 +388,7 @@ async function routeSherpaTypedSelection(ev, to, conv, baseState) {
   const hist = Array.isArray(conv.history) ? conv.history : [];
   const draft = { ...(conv.draft || {}), intro_sent: true };
   if (sel.sendFailed) {
-    await wa.sendText(to, "sorry, couldn't load that sherpa just now. try again?");
+    await sendText(to, "sorry, couldn't load that sherpa just now. try again?");
   } else {
     hist.push({ role: 'user', content: ev.text });
     hist.push({

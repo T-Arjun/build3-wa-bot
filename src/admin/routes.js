@@ -28,7 +28,25 @@ router.get('/api/conversations', async (_req, res) => {
       .order('last_message_at', { ascending: false })
       .limit(200);
     if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    const rows = data || [];
+
+    // `history` is capped to 10 for LLM context - the sidebar badge needs the
+    // REAL total. Read it from the message_log_counts VIEW (grouped server-side
+    // by Postgres) rather than pulling raw rows and tallying in JS - that
+    // scales with the number of conversations, not the size of the whole log,
+    // and never silently under-counts a conversation past some row cap.
+    try {
+      const { data: countRows, error: countErr } = await supabase()
+        .from('message_log_counts')
+        .select('wa_id, message_count');
+      if (countErr) throw countErr;
+      const counts = {};
+      for (const r of countRows || []) counts[r.wa_id] = r.message_count;
+      for (const c of rows) c.message_count = counts[c.wa_id] || 0;
+    } catch (_e) {
+      // view unavailable (migration not applied yet) - badge falls back below.
+    }
+    res.json(rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -44,6 +62,30 @@ router.get('/api/conversations/:waId', async (req, res) => {
       .maybeSingle();
     if (error) return res.status(500).json({ error: error.message });
     res.json(data || null);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── API: full-fidelity message log for one conversation ────────────────────
+// Unbounded, unlike conversations.history (capped to 10 for LLM context) - this
+// is what the dashboard renders so it always matches what actually hit WhatsApp.
+router.get('/api/conversations/:waId/messages', async (req, res) => {
+  try {
+    // Fetch the MOST RECENT rows first (id desc - a strictly monotonic insert
+    // order, safer than created_at when several rows land in the same
+    // millisecond), then reverse to ascending for display. A cap has to bias
+    // toward recency: capping oldest-first would hide exactly the newest
+    // messages once a conversation passes the limit - the same "not the full
+    // conversation" bug this table was built to fix.
+    const { data, error } = await supabase()
+      .from('message_log')
+      .select('*')
+      .eq('wa_id', req.params.waId)
+      .order('id', { ascending: false })
+      .limit(2000);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json((data || []).reverse());
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -200,22 +242,47 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0
 .no-results{padding:20px;color:#333;font-size:12px;text-align:center}
 
 .thread{flex:1;display:flex;flex-direction:column;overflow:hidden}
-.thread-header{padding:12px 20px;border-bottom:1px solid #1e1e1e;display:flex;align-items:center;gap:10px}
+.thread-header{padding:12px 20px;border-bottom:1px solid #1e1e1e;display:flex;align-items:center;gap:10px;background:#111}
 .thread-info{flex:1}
 .thread-num{font-size:14px;font-weight:600;font-family:monospace;color:#e0e0e0}
 .thread-meta{font-size:11px;color:#555;margin-top:2px}
-.thread-body{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:12px}
-.empty{color:#333;font-size:13px;text-align:center;margin-top:80px;line-height:2}
 
-.msg{max-width:70%;display:flex;flex-direction:column;gap:3px}
+/* WhatsApp-accurate chat surface: dark wallpaper + doodle texture, like the
+   real WhatsApp Business app dark theme, so this reads as "the actual chat"
+   rather than a generic log viewer. */
+.thread-body{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:2px;
+  background-color:#0b141a;
+  background-image:radial-gradient(circle at 8px 8px,rgba(255,255,255,.025) 1.4px,transparent 1.5px);
+  background-size:32px 32px;}
+.empty{color:#3b4a54;font-size:13px;text-align:center;margin-top:80px;line-height:2}
+.day-sep{align-self:center;background:#182229;color:#8696a0;font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px;margin:12px 0 8px;text-transform:uppercase;letter-spacing:.3px}
+
+.msg{max-width:65%;display:flex;flex-direction:column;margin-bottom:3px}
 .msg.user{align-self:flex-start}
 .msg.bot{align-self:flex-end}
-.bubble{padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.5;word-break:break-word;white-space:pre-wrap}
-.msg.user .bubble{background:#1e1e1e;border-radius:12px 12px 12px 3px;color:#d0d0d0}
-.msg.bot .bubble{background:#1e1a3e;border-radius:12px 12px 3px 12px;color:#c4b5fd}
-.msg-label{font-size:10px;font-weight:600;color:#444;text-transform:uppercase;letter-spacing:.5px}
-.msg.bot .msg-label{text-align:right;color:#4c3f8a}
-.tool{align-self:center;background:#0f1a0f;border:1px solid #1a3a1a;border-radius:8px;padding:5px 12px;font-size:11px;color:#4ade80;font-family:monospace;max-width:92%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bubble{position:relative;padding:6px 9px 8px;border-radius:8px;font-size:13.5px;line-height:1.4;word-break:break-word;white-space:pre-wrap;box-shadow:0 1px 1px rgba(0,0,0,.3)}
+.msg.user .bubble{background:#202c33;color:#e9edef;border-top-left-radius:0}
+.msg.bot .bubble{background:#005c4b;color:#e9edef;border-top-right-radius:0}
+.bubble .ts{display:block;text-align:right;font-size:10.5px;color:#8696a0;margin-top:2px;user-select:none}
+.msg.bot .bubble .ts{color:#8fd6c4}
+.bubble .ts .tick{margin-left:3px}
+.bubble .fail-tag{display:inline-block;margin-top:4px;background:#3a1414;color:#f87171;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px}
+
+/* Rich content: image card (avatar/profile), list message (areas/founders/sherpas),
+   quick-reply buttons, and CTA link - matching how each actually renders on WhatsApp. */
+.bubble img.media{display:block;width:100%;max-width:260px;border-radius:6px 6px 2px 2px;margin-bottom:6px;background:#0e0e0e}
+.bubble .caption{white-space:pre-wrap}
+.list-head{font-weight:700;margin-bottom:2px}
+.list-body{color:#e9edef}
+.list-btn{display:block;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:#53bdeb;font-weight:600;font-size:13px;text-align:center;cursor:pointer}
+.list-rows{margin-top:6px;font-size:12px;color:#cfe8e0}
+.list-rows summary{cursor:pointer;color:#8fd6c4;font-size:11px;list-style:none}
+.list-row{padding:4px 0;border-top:1px solid rgba(255,255,255,.08)}
+.list-row .rt{font-weight:600}
+.list-row .rd{color:#a9c9c1;font-size:11px}
+.btn-pill{display:block;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:#53bdeb;font-weight:600;font-size:13px;text-align:center}
+.cta-pill{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:#53bdeb;font-weight:600;font-size:13px}
+.tap-note{align-self:center;background:rgba(255,255,255,.06);color:#8696a0;font-size:11.5px;padding:4px 10px;border-radius:8px;margin:4px 0}
 
 .state-bar{border-top:1px solid #1e1e1e;padding:8px 20px;display:flex;gap:10px;flex-wrap:wrap;background:#0d0d0d;font-size:11px;flex-shrink:0}
 .state-item{background:#141414;border:1px solid #2a2a2a;border-radius:6px;padding:3px 10px;color:#888}
@@ -316,12 +383,15 @@ function renderList() {
     const preview = lastUserMsg(hist);
     const active = selected === c.wa_id ? ' active' : '';
     const num = formatNum(c.wa_id);
-    return \`<div class="conv-item\${active}" onclick="selectConv('\${c.wa_id}')">
+    // message_count comes from the unbounded message_log; history.length (capped
+    // at 10) is only a fallback for when that table isn't reachable.
+    const count = c.message_count != null ? c.message_count : hist.length;
+    return \`<div class="conv-item\${active}" onclick="selectConv('\${escJs(c.wa_id)}')">
       <div class="conv-num">\${esc(num)}</div>
       \${c.founder_slug ? \`<div class="conv-name">\${esc(c.founder_slug)}</div>\` : ''}
       <div class="conv-time">\${relTime(c.last_message_at)}</div>
       \${preview ? \`<div class="conv-preview">\${esc(preview)}</div>\` : ''}
-      <div class="msg-count">\${hist.length}</div>
+      <div class="msg-count">\${count}</div>
     </div>\`;
   }).join('');
 }
@@ -348,47 +418,87 @@ async function clearConv(waId, e) {
   if (selected === waId) await loadThread(waId);
 }
 
+function timeOf(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function dayOf(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** Render one message_log row as a WhatsApp-accurate bubble - text/image/list/buttons/cta. */
+function renderBubble(m) {
+  const isOut = m.direction === 'out';
+  const cls = isOut ? 'bot' : 'user';
+  const p = m.payload || {};
+  const ts = \`<span class="ts">\${timeOf(m.created_at)}\${isOut ? '<span class="tick">✓</span>' : ''}</span>\`;
+  const failTag = isOut && m.ok === false ? '<span class="fail-tag">⚠ failed to send</span><br>' : '';
+
+  let inner;
+  if (m.kind === 'text') {
+    inner = esc(p.body != null ? p.body : p.text);
+  } else if (m.kind === 'image') {
+    inner = \`\${p.url ? \`<img class="media" src="\${esc(p.url)}" onerror="this.style.display='none'">\` : ''}<span class="caption">\${esc(p.caption || '')}</span>\`;
+  } else if (m.kind === 'list') {
+    const rows = (p.rows || []).map(r => \`<div class="list-row"><div class="rt">\${esc(r.title || '')}</div>\${r.description ? \`<div class="rd">\${esc(r.description)}</div>\` : ''}</div>\`).join('');
+    inner = \`\${p.header ? \`<div class="list-head">\${esc(p.header)}</div>\` : ''}<div class="list-body">\${esc(p.body || '')}</div>\`
+      + (rows ? \`<details class="list-rows"><summary>\${(p.rows||[]).length} option\${(p.rows||[]).length===1?'':'s'} ▾</summary>\${rows}</details>\` : '')
+      + \`<div class="list-btn">▤ \${esc(p.button || 'View')}</div>\`;
+  } else if (m.kind === 'buttons') {
+    const btns = (p.buttons || []).map(b => \`<div class="btn-pill">\${esc(b.title || '')}</div>\`).join('');
+    inner = \`<div class="list-body">\${esc(p.body || '')}</div>\${btns}\`;
+  } else if (m.kind === 'cta') {
+    inner = \`\${p.headerImage ? \`<img class="media" src="\${esc(p.headerImage)}" onerror="this.style.display='none'">\` : ''}<div class="list-body">\${esc(p.body || '')}</div><div class="cta-pill">🔗 \${esc(p.title || 'Open link')}</div>\`;
+  } else if (m.kind === 'image_received') {
+    inner = \`<span class="caption">📷 image received\${p.caption ? ': ' + esc(p.caption) : ''}</span>\`;
+  } else {
+    inner = esc(JSON.stringify(p));
+  }
+
+  return \`<div class="msg \${cls}"><div class="bubble">\${failTag}\${inner}\${ts}</div></div>\`;
+}
+
 async function loadThread(waId) {
   if (!waId) return;
-  const r = await fetch(API + '/conversations/' + encodeURIComponent(waId) + QS);
-  const conv = await r.json();
+  const [convR, msgR] = await Promise.all([
+    fetch(API + '/conversations/' + encodeURIComponent(waId) + QS),
+    fetch(API + '/conversations/' + encodeURIComponent(waId) + '/messages' + QS),
+  ]);
+  const conv = await convR.json();
+  const messages = await msgR.json();
   if (!conv) return;
 
-  const hist = conv.history || [];
   const draft = conv.draft || {};
   const num = formatNum(waId);
+  const count = Array.isArray(messages) ? messages.length : 0;
 
   document.getElementById('threadHeader').innerHTML = \`
     <div class="thread-info">
       <div class="thread-num">\${esc(num)}</div>
       <div class="thread-meta">
-        Last active \${relTime(conv.last_message_at)} &nbsp;·&nbsp; \${hist.length} messages
+        Last active \${relTime(conv.last_message_at)} &nbsp;·&nbsp; \${count} messages
         \${conv.founder_slug ? \` &nbsp;·&nbsp; <span style="color:#6366f1">\${esc(conv.founder_slug)}</span>\` : ''}
       </div>
     </div>
-    <button class="btn danger" onclick="clearConv('\${waId}', event)">✕ Clear</button>\`;
+    <button class="btn danger" onclick="clearConv('\${escJs(waId)}', event)">✕ Clear state</button>\`;
 
   const body = document.getElementById('threadBody');
-  if (!hist.length) {
+  if (!count) {
     body.innerHTML = '<div class="empty">No messages yet</div>';
   } else {
-    body.innerHTML = hist.map(m => {
-      if (m.role === 'user') {
-        return \`<div class="msg user">
-          <div class="msg-label">Founder</div>
-          <div class="bubble">\${esc(m.content)}</div>
-        </div>\`;
+    let lastDay = null;
+    const parts = [];
+    for (const m of messages) {
+      const day = dayOf(m.created_at);
+      if (day !== lastDay) {
+        parts.push(\`<div class="day-sep">\${day}</div>\`);
+        lastDay = day;
       }
-      const c = m.content || '';
-      if (c.startsWith('(internal note')) {
-        const note = c.replace(/^\\(internal note[^-]*- /, '').replace(/\\)$/, '');
-        return \`<div class="tool">📌 \${esc(note)}</div>\`;
-      }
-      return \`<div class="msg bot">
-        <div class="msg-label">Bot</div>
-        <div class="bubble">\${esc(c)}</div>
-      </div>\`;
-    }).join('');
+      parts.push(renderBubble(m));
+    }
+    body.innerHTML = parts.join('');
     body.scrollTop = body.scrollHeight;
   }
 
@@ -410,7 +520,16 @@ function showToast(msg) {
 }
 
 function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// For values interpolated into a single-quoted JS-string argument that itself
+// sits inside an HTML attribute (e.g. onclick="fn('\${escJs(x)}')") - escape
+// backslash/quote for the JS layer first, then esc() for the HTML-attribute
+// layer, so neither parser can be broken out of by attacker-influenced data
+// (wa_id comes straight from the WhatsApp webhook's "from" field).
+function escJs(s) {
+  return esc(String(s || '').replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\\\'"));
 }
 
 async function tick() {
@@ -509,7 +628,7 @@ const QS = '${qs}';
 const AREA_KEYS = ${areaKeys};
 let editing = null;
 
-function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function banner(msg, ok){const b=document.getElementById('banner');b.textContent=msg;b.style.display='block';b.style.color=ok?'#7ee0a0':'#e8c97a';b.style.borderColor=ok?'#1a4a2a':'#4a3a1a';b.style.background=ok?'#0a1a10':'#1a160a';}
 
 async function load(){
@@ -524,7 +643,7 @@ async function load(){
       <td class="muted">\${esc(s.expertise||'')}</td>
       <td><a class="link" href="\${esc(s.booking_url)}" target="_blank" rel="noopener">\${esc(s.booking_url||'')}</a></td>
       <td class="actions">
-        <button class="btn" onclick='edit(\${JSON.stringify(JSON.stringify(s))})'>Edit</button>
+        <button class="btn" onclick='edit(\${esc(JSON.stringify(JSON.stringify(s)))})'>Edit</button>
         \${s.is_active===false?'':'<button class="btn danger" onclick="deactivate(\\''+esc(s.slug)+'\\')">Off</button>'}
       </td>
     </tr>\`).join('') || '<tr><td colspan="5" class="muted">no sherpas.</td></tr>';
