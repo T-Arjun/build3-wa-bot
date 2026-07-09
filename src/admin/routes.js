@@ -330,6 +330,22 @@ const API = '${apiBase}';
 const QS  = '${qs}';
 let selected = null;
 let convData = [];
+let lastLoadedWaId = null;
+
+// Auto-refresh (every 5s) used to blindly force-scroll the thread to the
+// bottom on every tick, which yanked you back down mid-read if you'd
+// scrolled up to see history. Only snap to bottom on a fresh conversation
+// pick, or when you're already within a few px of the bottom (i.e. you were
+// following the live tail) - otherwise keep you exactly where you were.
+function setThreadBody(html, waId) {
+  const body = document.getElementById('threadBody');
+  const wasNearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
+  const isFreshSelection = waId !== lastLoadedWaId;
+  const prevScrollTop = body.scrollTop;
+  body.innerHTML = html;
+  body.scrollTop = (isFreshSelection || wasNearBottom) ? body.scrollHeight : prevScrollTop;
+  lastLoadedWaId = waId;
+}
 
 function formatNum(wa) {
   // Show full number formatted: 919876543210 → +91 98765 43210
@@ -486,7 +502,6 @@ async function loadThread(waId) {
     </div>
     <button class="btn danger" onclick="clearConv('\${escJs(waId)}', event)">✕ Clear state</button>\`;
 
-  const body = document.getElementById('threadBody');
   const legacyHist = Array.isArray(conv.history) ? conv.history : [];
   if (!count && legacyHist.length) {
     // message_log has nothing for this wa_id - either nothing has happened
@@ -508,10 +523,9 @@ async function loadThread(waId) {
       const inner = (note ? \`<div class="caption">📌 \${esc(note)}</div>\` : '') + (text ? esc(text) : '');
       parts.push(\`<div class="msg \${isOut ? 'bot' : 'user'}"><div class="bubble">\${inner || esc('(no text)')}</div></div>\`);
     }
-    body.innerHTML = parts.join('');
-    body.scrollTop = body.scrollHeight;
+    setThreadBody(parts.join(''), waId);
   } else if (!count) {
-    body.innerHTML = '<div class="empty">No messages yet</div>';
+    setThreadBody('<div class="empty">No messages yet</div>', waId);
   } else {
     let lastDay = null;
     const parts = [];
@@ -523,8 +537,7 @@ async function loadThread(waId) {
       }
       parts.push(renderBubble(m));
     }
-    body.innerHTML = parts.join('');
-    body.scrollTop = body.scrollHeight;
+    setThreadBody(parts.join(''), waId);
   }
 
   const stateBar = document.getElementById('stateBar');
