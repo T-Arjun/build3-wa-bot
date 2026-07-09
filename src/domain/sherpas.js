@@ -97,6 +97,11 @@ async function listAreas() {
   return areasWithCounts(await loadAll());
 }
 
+/** All active sherpas (for deterministic name grounding in the engine). */
+async function listAll() {
+  return loadAll();
+}
+
 async function listByArea(areaKey) {
   return filterByArea(await loadAll(), areaKey);
 }
@@ -112,6 +117,7 @@ async function searchByExpertise(text) {
 
 module.exports = {
   listAreas,
+  listAll,
   listByArea,
   getBySlug,
   searchByExpertise,

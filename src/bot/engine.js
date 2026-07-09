@@ -54,6 +54,12 @@ async function run(input) {
         JSON.stringify(input.self),
     });
   }
+  if (input.mentionNote) {
+    // Deterministic person-entity grounding (handler.buildEntityGrounding):
+    // pins names in THIS message to canonical people so the model never
+    // substitutes a similar-sounding person from its summarized history.
+    messages.push({ role: 'system', content: input.mentionNote });
+  }
   messages.push(...history, { role: 'user', content: input.text || '' });
 
   let finalText = '';

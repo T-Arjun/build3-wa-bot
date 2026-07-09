@@ -10,7 +10,8 @@ const messageLog = require('../domain/messageLog');
 const { resolveTypedSelection } = require('./ordinal');
 const { pushProfile, pushSherpaCard } = require('./tools');
 const { areaLabel } = require('../domain/sherpaAreas');
-const { untrackedNote } = require('./guards');
+const { untrackedNote, selfHarmResponse } = require('./guards');
+const { buildMentionNote, findMentions } = require('./mentions');
 const fmt = require('./format');
 const wa = require('../whatsapp/cloudApi');
 const log = require('../lib/logger');
@@ -114,6 +115,27 @@ async function processEvent(ev) {
   // Persist resolved identity early.
   const baseState = { founder_slug: requesterSlug };
 
+  // 0.5) Explicit self-harm language: fixed humane response, no LLM turn.
+  // A founder-networking bot must never answer "I want to kill myself" with a
+  // founder search or a chirpy register. The regex is deliberately narrow
+  // (first-person harm only); mere talk of death goes to the normal engine,
+  // whose prompt has sensitive-topic rules.
+  if (ev.text && !ev.replyId) {
+    const care = selfHarmResponse(ev.text);
+    if (care) {
+      await sendText(to, care);
+      const hist = Array.isArray(conv.history) ? conv.history : [];
+      hist.push({ role: 'user', content: ev.text });
+      hist.push({ role: 'assistant', content: care });
+      await saveConversation(to, {
+        ...baseState,
+        history: hist.slice(-10),
+        draft: { ...(conv.draft || {}), intro_sent: true },
+      });
+      return;
+    }
+  }
+
   // 1) Interactive reply routing (deterministic, no LLM). Wrapped so a tap can
   // never die silently (typing indicator then nothing): on any error we tell the
   // user instead of leaving them staring at a dead card.
@@ -147,6 +169,7 @@ async function processEvent(ev) {
   // footer on interactive messages, so we don't lead with a scripted liability line.)
   try {
     const history = Array.isArray(conv.history) ? conv.history : [];
+    const mentionNote = await buildEntityGrounding(ev.text, conv);
     const { outbox, finalText, state, assistantSummary } = await engine.run({
       text: ev.text || '',
       waId: to,
@@ -156,6 +179,7 @@ async function processEvent(ev) {
       focus: conv.draft?.focus || null,
       self: conv.draft?.self || null,
       prevMatchSlugs: (conv.draft?.match_cache || []).map((m) => m.slug),
+      mentionNote,
     });
 
     // Honesty backstop: if they tried to filter by an untracked attribute
@@ -188,6 +212,55 @@ async function processEvent(ev) {
   } catch (err) {
     log.error('handleEvent engine error:', err.message);
     await sendText(to, "Sorry, something went wrong on my side. Try again in a moment.");
+  }
+}
+
+/**
+ * Deterministic person-entity grounding (see mentions.js for the why): scan
+ * the raw text against every person currently "in play" for this conversation
+ * and produce a system note pinning names to canonical identities. Failure
+ * here must never block the turn - worst case the model falls back to its old
+ * (fuzzier) behavior.
+ */
+async function buildEntityGrounding(text, conv) {
+  if (!text) return null;
+  try {
+    const draft = conv.draft || {};
+    const candidates = [];
+    for (const s of await sherpas.listAll()) {
+      candidates.push({ name: s.name, slug: s.slug, type: 'sherpa', bookingUrl: s.booking_url });
+    }
+    if (draft.focus?.slug) {
+      candidates.push({
+        name: draft.focus.name,
+        slug: draft.focus.slug,
+        type: 'founder',
+        linkedinUrl: draft.focus.linkedin_url || undefined,
+      });
+    }
+    for (const m of draft.match_cache || []) {
+      if (m?.slug) candidates.push({ name: m.name, slug: m.slug, type: 'founder', linkedinUrl: m.linkedin_url || undefined });
+    }
+    for (const slug of conv.last_results || []) {
+      if (typeof slug === 'string') candidates.push({ name: slug.replace(/-/g, ' '), slug, type: 'founder' });
+    }
+    const hits = findMentions(text, candidates);
+    if (!hits.length) return null;
+    // Enrich matched founders that came in as bare slugs with their real
+    // name + LinkedIn, so the note can hand the model the actual link.
+    for (const h of hits) {
+      if (h.type === 'founder' && !h.linkedinUrl) {
+        const f = await founders.getBySlug(h.slug).catch(() => null);
+        if (f) {
+          h.name = f.name || h.name;
+          h.linkedinUrl = f.linkedin_url || undefined;
+        }
+      }
+    }
+    return buildMentionNote(text, hits);
+  } catch (err) {
+    log.warn('entity grounding failed (continuing without):', err.message);
+    return null;
   }
 }
 

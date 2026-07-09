@@ -44,4 +44,25 @@ function untrackedNote(text) {
   return null;
 }
 
-module.exports = { untrackedNote };
+/**
+ * Explicit self-harm language gets a fixed, humane response INSTEAD of an LLM
+ * turn - a founder-networking bot must never respond to "I want to kill
+ * myself" by searching founders or picking a chirpy register. Deliberately
+ * NARROW: philosophical/startup mentions of death ("what do you feel about
+ * death", "our near-death funding phase", "this deadline is killing me") must
+ * NOT trigger - the prompt's sensitive-topics rules handle tone there. Only
+ * first-person harm statements trigger the override.
+ * Tele-MANAS is India's national mental-health helpline (free, 24x7).
+ */
+const SELF_HARM_RE =
+  /\b(kill(?:ing)?\s+myself|end(?:ing)?\s+my\s+life|suicidal|suicide|self[\s-]?harm|hurt(?:ing)?\s+myself|want\s+to\s+die|wanna\s+die|khudkushi|atmahatya)\b/i;
+
+const SELF_HARM_RESPONSE =
+  "that sounds really heavy, and we're not going to pretend a founder bot is the right support for it. please talk to someone you trust, or reach Tele-MANAS, India's free 24x7 mental health helpline: call 14416 or 1-800-891-4416. we're here whenever you want to talk startups, no pressure.";
+
+/** Fixed compassionate response if the message contains explicit self-harm language, else null. */
+function selfHarmResponse(text) {
+  return SELF_HARM_RE.test(String(text || '')) ? SELF_HARM_RESPONSE : null;
+}
+
+module.exports = { untrackedNote, selfHarmResponse };
