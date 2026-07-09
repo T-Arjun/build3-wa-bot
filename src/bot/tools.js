@@ -316,6 +316,11 @@ const impls = {
           ? "didn't find an exact match - did you mean one of these?"
           : 'found a couple of people - which one did you mean?';
     ctx.outbox.push({ kind: 'list', body, button: 'Choose', rows: matches.map(fmt.toRow) });
+    // Remember the candidates: enables the typed-ordinal pick ("the first
+    // one") AND next turn's deterministic entity grounding. Without this, a
+    // follow-up like "give me pranav's contact" had NO grounded candidates,
+    // and the model fabricated a plausible-looking (broken) LinkedIn URL.
+    ctx.state.last_results = matches.map((f) => f.source_slug);
     return {
       status: 'ambiguous',
       candidates: matches.map((f) => `${f.name} (${fmt.subtitle(f) || 'no details'})`),
