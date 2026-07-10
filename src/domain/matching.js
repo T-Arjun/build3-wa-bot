@@ -109,7 +109,14 @@ async function findCofounders(filters = {}, requesterSlug = null, self = null) {
 
   const cached = await readCache(requesterSlug, sig);
   if (cached) {
-    return { results: cached, poolSize: cached.length, cached: true, tooFew: cached.length < 3 };
+    // `soft` (whether these are confirmed cofounder-seekers or a fallback of
+    // non-seeking founders worth a conversation) used to be lost on a cache
+    // hit, silently downgrading the "heads up, they haven't marked themselves
+    // as looking" disclosure for anyone who hit the cached path. Tagged on
+    // each cached result (mirrors the existing `_fuzzy` convention in
+    // founders.js) so it survives the round trip.
+    const soft = cached.length > 0 && cached.every((r) => r._soft === true);
+    return { results: cached, poolSize: cached.length, cached: true, tooFew: cached.length < 3, soft };
   }
 
   const requester = requesterSlug ? await getBySlug(requesterSlug) : null;
@@ -174,6 +181,7 @@ async function findCofounders(filters = {}, requesterSlug = null, self = null) {
         linkedin_url: c.linkedin_url,
         score: Math.min(100, Math.max(0, Math.round(m.score))),
         reasons: Array.isArray(m.reasons) ? m.reasons.slice(0, 2) : [],
+        _soft: soft,
       };
     })
     .sort((a, b) => b.score - a.score);
