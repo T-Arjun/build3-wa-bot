@@ -202,6 +202,14 @@ function matchCaption(m) {
     lines.push(m.city);
   }
   for (const r of m.reasons || []) lines.push(`• ${r}`);
+  // The whole point of a cofounder match is being able to actually reach out -
+  // making the user ask again ("show me his profile") just to get the
+  // LinkedIn link is friction with no upside, so it rides on the match card
+  // itself, same as a full profile card.
+  if (m.linkedin_url) {
+    lines.push('');
+    lines.push(m.linkedin_url);
+  }
   return lines.join('\n');
 }
 

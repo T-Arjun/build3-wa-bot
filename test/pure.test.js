@@ -268,6 +268,22 @@ test('profileCaption meta line leads with the bolded company name', () => {
   assert.match(cap.split('\n')[1], /^\*build3\* · Education & Skilling · Kudal/);
 });
 
+test('matchCaption carries the LinkedIn link, same as a full profile card', () => {
+  const fmt = require('../src/bot/format');
+  const withLinkedin = fmt.matchCaption({
+    name: 'Achyutha Yeswanth Sriraj',
+    score: 85,
+    city: 'Bengaluru',
+    startup_idea: 'a physics-informed acoustic sensor',
+    reasons: ['directly complements with engineering skills'],
+    linkedin_url: 'https://www.linkedin.com/in/achyutha-example',
+  });
+  assert.match(withLinkedin, /https:\/\/www\.linkedin\.com\/in\/achyutha-example/);
+  // No LinkedIn on file -> no dangling blank line / broken caption
+  const noLinkedin = fmt.matchCaption({ name: 'X', score: 70, reasons: [] });
+  assert.doesNotMatch(noLinkedin, /linkedin/i);
+});
+
 test('avatarFor never yields an SVG WhatsApp would silently drop', () => {
   const fmt = require('../src/bot/format');
   // photoless founders in the source carry a ui-avatars SVG URL, not null
