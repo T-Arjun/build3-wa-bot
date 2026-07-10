@@ -167,6 +167,31 @@ const MATCH_SHOWN_NOTE =
 const LIST_SHOWN_NOTE =
   'Your text reply is sent FIRST, then the interactive list/cards appear right below it. Write a warm, helpful lead-in (1-2 short sentences, build3 tone) that frames what they are about to see and invites them to tap. Do NOT enumerate or repeat the names/items - the list already shows them; repeating them is the mistake to avoid. IMPORTANT: if the user\'s message also asked something ELSE besides this search (another question or need), answer that part too in the same reply, even in one line; never silently drop a part of their message.';
 
+/**
+ * Deterministic, honest lead-in for a cofounder match that had to widen past
+ * the sector/city the user actually asked for (or fell back to non-seeking
+ * "soft" connects). Sent as a real message from the CODE, not left to the
+ * model - a text `note` asking it to "disclose this honestly" was tried first
+ * and the model did not reliably comply live (e.g. calling a widened-past-
+ * fintech match "a fintech cofounder match" for an unrelated sector).
+ */
+function widenedSearchDisclosure(dropped, filters, soft) {
+  const droppedBits = [];
+  if (dropped.includes('city') && filters.city) droppedBits.push(filters.city);
+  if (dropped.includes('sector') && filters.sector) droppedBits.push(filters.sector);
+  const droppedText = droppedBits.join(' + ');
+
+  let body = droppedText
+    ? `no strong ${droppedText} match, so here's from the wider community instead:`
+    : "here's from the wider community instead:";
+  if (soft) {
+    body +=
+      " (heads up, these folks haven't marked themselves as actively looking for a cofounder, " +
+      "but worth a conversation if you like):";
+  }
+  return body;
+}
+
 /** Tool implementations. Each receives (args, ctx) and returns a summary object for the model. */
 const impls = {
   async search_founders(args, ctx) {
@@ -338,14 +363,21 @@ const impls = {
     let { results, poolSize, tooFew, soft } = await findCofounders(filters, ctx.requesterSlug, ctx.self);
     let dropped = [];
     // Deterministic backstop (don't rely on the model alone - it has repeated
-    // this exact mistake live, twice): city AND sector are the #1 false-empty
-    // causes, because they very often describe the USER's OWN startup (leaked
-    // in via set_self_profile) rather than a real requirement on the cofounder
-    // - "I run a d2c brand" does not mean the cofounder must also be d2c. Before
-    // reporting "no matches" at all, progressively drop city then sector (the
-    // skill they actually asked for is NEVER dropped) and use the first level
-    // that produces a real pool. Never manufacture a false "nobody exists" from
-    // a filter the person likely didn't mean to put on the OTHER person.
+    // this exact mistake live, MULTIPLE times now: dropping a filter and then
+    // describing the widened result AS IF it still matched the dropped
+    // criterion, e.g. "found a fintech cofounder match" for a respiratory-
+    // sensor founder once sector was silently dropped. The tool used to pass
+    // only a text `note` asking the model to disclose this honestly - it
+    // doesn't reliably comply live, so the disclosure is now a directly
+    // pushed message, not a suggestion). city AND sector are the #1
+    // false-empty causes, because they very often describe the USER's OWN
+    // startup (leaked in via set_self_profile) rather than a real requirement
+    // on the cofounder - "I run a d2c brand" does not mean the cofounder must
+    // also be d2c. Before reporting "no matches" at all, progressively drop
+    // city then sector (the skill they actually asked for is NEVER dropped)
+    // and use the first level that produces a real pool. Never manufacture a
+    // false "nobody exists" from a filter the person likely didn't mean to
+    // put on the OTHER person.
     if ((poolSize === 0 || results.length === 0) && (filters.city || filters.sector)) {
       const attempts = [];
       if (filters.city) attempts.push({ city: undefined, label: filters.city });
@@ -376,14 +408,8 @@ const impls = {
         note: "Everyone matching these EXACT criteria was already shown. Do NOT dead-end and do NOT re-send their cards. Offer to WIDEN the pool (a nearby city, open-to-remote, or an adjacent sector) while KEEPING the core skill/role they asked for. Never suggest switching to a different core skill.",
       };
     }
-    if (soft) {
-      ctx.outbox.push({
-        kind: 'text',
-        body:
-          "we didn't find anyone there who's said they're actively looking for a cofounder. " +
-          'but we do have a few founder connects from that search - they\'re not explicitly seeking, ' +
-          'though if you like, we can help you start a conversation with them:',
-      });
+    if (dropped.length || soft) {
+      ctx.outbox.push({ kind: 'text', body: widenedSearchDisclosure(dropped, filters, soft) });
     }
     const top = fresh.slice(0, 3);
     for (const m of top) {
@@ -403,11 +429,16 @@ const impls = {
     return {
       status: 'ok',
       soft,
+      widened: dropped.length ? dropped : undefined,
       shown: top.length,
       total: fresh.length,
       tooFew: fresh.length < 3,
+      // The honest "this is widened / not an exact match" disclosure is now a
+      // message the CODE already sent (see widenedSearchDisclosure above) -
+      // this note only needs to stop the model from re-describing the result
+      // as matching the dropped criterion in its own lead-in line.
       note: dropped.length
-        ? `No strong match against the original ${dropped.join('/')} filter, so these are from a widened search instead - say that honestly in one line (e.g. "not many matching that exactly, but here's from the wider community:"), don't pretend the constraint was never mentioned. ${MATCH_SHOWN_NOTE}`
+        ? `The disclosure above ALREADY told them this widened past ${dropped.join('/')} - do not also claim the results match ${dropped.join(' or ')} in your reply. ${MATCH_SHOWN_NOTE}`
         : MATCH_SHOWN_NOTE,
     };
   },
@@ -550,4 +581,4 @@ function pushSherpaCard(ctx, s) {
   });
 }
 
-module.exports = { definitions, impls, pushProfile, pushSherpaCard, hasAnyFilter, toFilters };
+module.exports = { definitions, impls, pushProfile, pushSherpaCard, hasAnyFilter, toFilters, widenedSearchDisclosure };
