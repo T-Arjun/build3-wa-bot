@@ -385,54 +385,6 @@ function closestKnown(token) {
 }
 
 /**
- * Resolve a known (already-canonical) token to its match terms: a region, a
- * state, a city alias group, or a single mapped/literal city.
- */
-function resolveKnown(q) {
-  if (REGIONS[q]) {
-    return { isState: false, isRegion: true, state: null, terms: Array.from(new Set(REGIONS[q])) };
-  }
-  const stateName = STATES.has(q) ? q : STATE_ALIASES[q];
-  if (stateName && STATE_TO_CITIES[stateName]) {
-    return { isState: true, state: stateName, terms: Array.from(new Set([stateName, ...STATE_TO_CITIES[stateName]])) };
-  }
-  const group = ALIAS_LOOKUP[q];
-  if (group) return { isState: false, state: CITY_STATE[q] || null, terms: Array.from(new Set([q, ...group])) };
-  if (CITY_STATE[q]) return { isState: false, state: CITY_STATE[q], terms: [q] };
-  return null;
-}
-
-/**
- * Expand a free-text location into the set of substring terms to match against
- * the `city` field.
- *
- * @returns {{ isState: boolean, isRegion?: boolean, state: ?string, terms: string[], fuzzy?: string }}
- *   terms are lowercase substrings; a row matches if `city` ILIKE %term% for ANY.
- */
-function expandLocation(text) {
-  let q = normalize(text);
-  if (!q) return { isState: false, state: null, terms: [] };
-
-  // Map a nickname/abbreviation ("blr", "bom") to its canonical city first, so it
-  // expands to real spellings and is never itself emitted as a (false-matching)
-  // substring term.
-  if (INPUT_ALIASES[q]) q = INPUT_ALIASES[q];
-
-  const known = resolveKnown(q);
-  if (known) return known;
-
-  // Typo correction as a last resort before giving up.
-  const corrected = closestKnown(q);
-  if (corrected && corrected !== q) {
-    const viaFuzzy = resolveKnown(corrected);
-    if (viaFuzzy) return { ...viaFuzzy, fuzzy: corrected };
-  }
-
-  // Unknown (e.g. a non-Indian city) → match it literally; never guess a state.
-  return { isState: false, state: null, terms: [q] };
-}
-
-/**
  * Tokens to fold into a founder's search_blob at sync time so free-text search
  * ("kerala", "cochin") matches even when the city field says "Kochi". Returns the
  * state and any alias variants for the given city string. Matches whole words so
@@ -530,7 +482,6 @@ module.exports = {
   normalize,
   editDistance,
   closestKnown,
-  expandLocation,
   blobLocationTokens,
   stateForCity,
   locationFilter,
