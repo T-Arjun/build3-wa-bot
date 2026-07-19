@@ -284,22 +284,46 @@ async function getBySlug(slug) {
 }
 
 /**
- * Find by (partial) name - returns up to `limit` for disambiguation.
+ * Build the safe pattern list for a name search: the whole phrase plus each
+ * individual token, all filtered to exclude PostgREST .or()-grammar
+ * metacharacters. Match the whole phrase OR any single name token, so
+ * "bhavana menon" still finds "Bhavana" (people give a wrong/extra surname
+ * all the time).
+ *
+ * SECURITY (real live-confirmed bug, fixed here): every pattern that reaches
+ * the .or() string MUST exclude `, ( ) * : " \` - an unescaped comma breaks
+ * out of its own `name.ilike.*...*` clause once joined with the rest and lets
+ * the remainder be parsed as an INDEPENDENT PostgREST clause on any column.
+ * Confirmed against the live DB: a name query containing a comma injected a
+ * real `cohort.gt.N` filter (Postgres itself threw `invalid input syntax for
+ * type integer`, proving the injected clause was actually being evaluated).
+ * Pure/exported so this is unit-testable without a database connection.
+ * @param {string} name
+ * @returns {string[]} deduped, safe patterns (may be empty)
  */
-async function findByName(name, limit = 5) {
+function buildNamePatterns(name) {
   const clean = String(name || '').trim();
   if (!clean) return [];
-  // Match the whole phrase OR any single name token, so "bhavana menon" still
-  // finds "Bhavana" (people give a wrong/extra surname all the time). Tokens are
-  // escaped to keep them safe inside the PostgREST or() grammar.
+  const UNSAFE = /[,()*:"\\]/;
   const tokens = clean
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter((t) => t.length >= 3 && !/[,()*:"\\]/.test(t));
-  const patterns = [clean.toLowerCase(), ...tokens];
-  const orExpr = Array.from(new Set(patterns))
-    .map((p) => `name.ilike.*${p}*`)
-    .join(',');
+    .filter((t) => t.length >= 3 && !UNSAFE.test(t));
+  const cleanLc = clean.toLowerCase();
+  const patterns = [...(UNSAFE.test(cleanLc) ? [] : [cleanLc]), ...tokens];
+  return Array.from(new Set(patterns));
+}
+
+/**
+ * Find by (partial) name - returns up to `limit` for disambiguation.
+ */
+async function findByName(name, limit = 5) {
+  const patterns = buildNamePatterns(name);
+  // A query that's empty, all unsafe characters, or too short to tokenize
+  // leaves patterns empty - .or('') is an empty filter, not "match nothing",
+  // so it must return early here rather than reach Postgres.
+  if (!patterns.length) return [];
+  const orExpr = patterns.map((p) => `name.ilike.*${p}*`).join(',');
   const { data, error } = await supabase()
     .from('founders')
     .select(LIST_COLUMNS)
@@ -309,7 +333,7 @@ async function findByName(name, limit = 5) {
   if (error) throw new Error(`findByName: ${error.message}`);
   // Rank fuller-phrase matches first ("bhavana menon" -> "Bhavana Menon" beats
   // a bare "Bhavana"), then dedupe duplicate person records.
-  const q = clean.toLowerCase();
+  const q = String(name || '').trim().toLowerCase();
   const ranked = (data || []).slice().sort((a, b) => {
     const an = String(a.name || '').toLowerCase();
     const bn = String(b.name || '').toLowerCase();
@@ -322,7 +346,8 @@ async function findByName(name, limit = 5) {
   // good match. Fuzzy results are a GUESS, not a confirmed match - tagged
   // `_fuzzy` so the caller confirms with the user instead of asserting it as
   // fact (a wrong confident answer is worse than asking "did you mean X?").
-  return fuzzyByName(tokens.length ? tokens : [q], limit);
+  const fuzzyTokens = q.split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
+  return fuzzyByName(fuzzyTokens.length ? fuzzyTokens : [q], limit);
 }
 
 /**
@@ -410,6 +435,7 @@ module.exports = {
   countFounders,
   getBySlug,
   findByName,
+  buildNamePatterns,
   cofounderCandidates,
   candidatesByFilters,
   dedupeFounders,

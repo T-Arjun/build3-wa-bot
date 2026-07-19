@@ -43,6 +43,24 @@ test('full-name-elsewhere veto: "amit malakar" must not pin a cached Amit Sharma
   assert.strictEqual(findMentions('put me in touch with amit', [SHARMA]).length, 1);
 });
 
+// Real observed failure: the veto above was meant to catch a DIFFERENT
+// person's surname right after the matched token, but with too narrow a
+// filler-word list, almost any ordinary word following a bare first name was
+// treated as evidence of a different person - defeating deterministic
+// grounding for the majority of realistic single-name messages.
+test('ordinary conversational closers after a bare first name do NOT veto the match', () => {
+  const PRANAV = { name: 'Pranav Khanna', slug: 'pranav-khanna', type: 'founder' };
+  for (const closer of ['asap', 'soon', 'quickly', 'bro', 'please', 'today', 'yeah', 'cool']) {
+    assert.strictEqual(
+      findMentions(`call pranav ${closer}`, [PRANAV]).length,
+      1,
+      `expected "pranav" to still ground when followed by "${closer}"`,
+    );
+  }
+  // the genuine veto (a different real surname) must still fire
+  assert.strictEqual(findMentions('call pranav malhotra', [PRANAV]).length, 0);
+});
+
 test('dual founder+sherpa name returns both, sherpa first', () => {
   const V_F = { name: 'Varun Chawla', slug: 'varun-chawla-f', type: 'founder' };
   const V_S = { name: 'Varun Chawla', slug: 'varun-chawla', type: 'sherpa', bookingUrl: 'x' };

@@ -65,4 +65,46 @@ function selfHarmResponse(text) {
   return SELF_HARM_RE.test(String(text || '')) ? SELF_HARM_RESPONSE : null;
 }
 
-module.exports = { untrackedNote, selfHarmResponse };
+const URL_RE = /https?:\/\/[^\s)>\]"']+/gi;
+
+/** Trailing punctuation a sentence often leaves stuck to a URL, plus casing. */
+function normalizeUrl(u) {
+  return String(u || '').trim().replace(/[.,;:)>\]]+$/, '').toLowerCase();
+}
+
+const UNVERIFIED_URL_FALLBACK =
+  "hold on, we don't have their link confirmed yet - ask again and we'll pull up the real one.";
+
+/**
+ * Deterministic backstop for the prompt's "URLS ARE NEVER TYPED FROM MEMORY"
+ * hard rule (real observed failure, live-reproduced): after a turn that ended
+ * on a pending disambiguation (e.g. "which Bhavana did you mean?"), asking
+ * about a brand-new, unrelated person in the next message sometimes made the
+ * model skip get_profile entirely and invent a plausible-looking LinkedIn URL
+ * from scratch - confirmed by running the same request twice and getting two
+ * DIFFERENT fabricated URLs for the same person. Prompt text alone doesn't
+ * reliably hold here (this project's established pattern for that class of
+ * failure - see untrackedNote above), so this scans the model's own reply for
+ * any URL and replaces the whole reply if that URL never actually appeared in
+ * this turn's tool results or grounding notes. A false-flag here only costs
+ * one honest "ask again" instead of a name-and-shame call-out, so the check
+ * can afford to be strict.
+ * @param {string} text - the model's proposed reply
+ * @param {string[]} verifiedUrls - every URL that legitimately surfaced this turn
+ * @returns {string} the original text, or a safe fallback if it contained an unverified URL
+ */
+function scrubUnverifiedUrls(text, verifiedUrls) {
+  const s = String(text || '');
+  const found = s.match(URL_RE);
+  if (!found) return text;
+  const verified = new Set((verifiedUrls || []).map(normalizeUrl));
+  const hasUnverified = found.some((u) => !verified.has(normalizeUrl(u)));
+  return hasUnverified ? UNVERIFIED_URL_FALLBACK : text;
+}
+
+/** Pull every URL out of an arbitrary string (tool-result JSON, system notes, ...). */
+function extractUrls(s) {
+  return String(s || '').match(URL_RE) || [];
+}
+
+module.exports = { untrackedNote, selfHarmResponse, scrubUnverifiedUrls, extractUrls };

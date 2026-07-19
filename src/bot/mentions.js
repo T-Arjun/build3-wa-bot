@@ -38,6 +38,20 @@ const COMMON_WORDS = new Set([
   'that', 'these', 'those', 'there', 'here', 'thanks', 'thank', 'hai', 'hain',
   'karo', 'kar', 'kya', 'aur', 'mujhe', 'chahiye', 'wala', 'wale', 'bhai',
   'yaar', 'feel', 'think', 'like', 'them', 'they',
+  // Ordinary conversational closers/adverbs (real observed failure: the
+  // full-name-elsewhere veto below was meant to catch "amit malakar" (a
+  // DIFFERENT person's surname right after the matched token), but with only
+  // the narrow list above, almost ANY word following a bare first name got
+  // treated as evidence of a different person - "call pranav asap"/"pranav
+  // soon"/"pranav bro" all silently failed to ground, defeating this file's
+  // whole purpose for the majority of realistic single-name messages. These
+  // are safe to whitelist: none are plausible directory first/last names.
+  'asap', 'soon', 'plz', 'pls', 'tomorrow', 'quickly', 'lately', 'urgently',
+  'immediately', 'yet', 'already', 'definitely', 'actually', 'maybe',
+  'probably', 'exactly', 'honestly', 'seriously', 'tho', 'though', 'bro',
+  'dude', 'man', 'buddy', 'guys', 'yeah', 'yep', 'nah', 'sure', 'cool',
+  'nice', 'great', 'good', 'fine', 'alright', 'right', 'well', 'yes', 'okay',
+  'ok',
 ]);
 
 // So common as surnames that a hit on ONE of these alone is noise, not a mention.

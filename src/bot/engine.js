@@ -4,6 +4,7 @@ const { openai } = require('../config/openai');
 const { env } = require('../config/env');
 const { systemPrompt } = require('./prompts');
 const { definitions, impls } = require('./tools');
+const { scrubUnverifiedUrls, extractUrls } = require('./guards');
 const log = require('../lib/logger');
 
 const MAX_TURNS = 4;
@@ -85,6 +86,15 @@ async function run(input) {
   }
   messages.push({ role: 'user', content: input.text || '' });
 
+  // Every URL that legitimately surfaced this turn - the initial context
+  // (focus/self/mentionNote/history) plus every tool result as it comes back
+  // below. Feeds scrubUnverifiedUrls: the deterministic backstop for "URLS
+  // ARE NEVER TYPED FROM MEMORY" (see guards.js for the live-reproduced
+  // failure this closes - the model fabricating a plausible-looking LinkedIn
+  // URL after a turn that ended on a pending disambiguation).
+  const verifiedUrls = [];
+  for (const m of messages) verifiedUrls.push(...extractUrls(m.content));
+
   let finalText = '';
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -116,6 +126,7 @@ async function run(input) {
           log.error(`tool ${name} failed:`, err.message);
           result = { status: 'error', message: 'tool failed' };
         }
+        verifiedUrls.push(...extractUrls(JSON.stringify(result)));
         // One observability line per turn: what the model extracted and what it got.
         // Lets us diagnose "the bot is dumb" from logs alone (wa, text, tool, filters, count).
         log.info(
@@ -130,7 +141,7 @@ async function run(input) {
       continue; // let the model react to tool results
     }
 
-    finalText = (msg.content || '').trim();
+    finalText = scrubUnverifiedUrls((msg.content || '').trim(), verifiedUrls);
     log.info(`turn wa=${ctx.waId || '?'} "${snippet(input.text)}" → reply "${snippet(finalText)}"`);
     break;
   }
