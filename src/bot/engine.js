@@ -60,7 +60,30 @@ async function run(input) {
     // substitutes a similar-sounding person from its summarized history.
     messages.push({ role: 'system', content: input.mentionNote });
   }
-  messages.push(...history, { role: 'user', content: input.text || '' });
+  messages.push(...history);
+  if (history.length) {
+    // Anti-echo (real observed failure): the model imitates the register of its
+    // own recent replies far more than the distant system prompt, so ONE bad
+    // deflection ("physics is outside our startup zone") seeds every following
+    // answer. This sits AFTER the transcript so recency works for us, not
+    // against us.
+    messages.push({
+      role: 'system',
+      content:
+        'REMINDER (overrides the transcript above): if any earlier reply of yours brushed off a general question, sounded scripted, or drifted from the rules, do NOT imitate it. Follow the system rules fresh each turn: answer general questions plainly, react like a person first.',
+    });
+  }
+  if (input.safetyRecent) {
+    // Sticky safety register: set for a couple of turns after the self-harm
+    // guard fired (handler owns the counter). Keeps the tone gentle without
+    // repeating the full helpline message every turn.
+    messages.push({
+      role: 'system',
+      content:
+        'SAFETY NOTE: this user very recently expressed thoughts of self-harm. Keep this reply gentle and unhurried: no chirpiness, no emoji, no exclamation marks, and no product offers unless they explicitly ask. If they hint at harm again, gently mention Tele-MANAS (14416, free, 24x7) without lecturing.',
+    });
+  }
+  messages.push({ role: 'user', content: input.text || '' });
 
   let finalText = '';
 

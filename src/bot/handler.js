@@ -130,7 +130,10 @@ async function processEvent(ev) {
       await saveConversation(to, {
         ...baseState,
         history: hist.slice(-10),
-        draft: { ...(conv.draft || {}), intro_sent: true },
+        // safety_recent keeps the register gentle for the next 2 engine turns
+        // (see engine.js SAFETY NOTE): the risk doesn't end with one reply, so
+        // the very next message must not bounce back to chirpy product mode.
+        draft: { ...(conv.draft || {}), intro_sent: true, safety_recent: 2 },
       });
       return;
     }
@@ -180,6 +183,7 @@ async function processEvent(ev) {
       self: conv.draft?.self || null,
       prevMatchSlugs: (conv.draft?.match_cache || []).map((m) => m.slug),
       mentionNote,
+      safetyRecent: (conv.draft?.safety_recent || 0) > 0,
     });
 
     // Honesty backstop: if they tried to filter by an untracked attribute
@@ -289,6 +293,13 @@ function persistDraft(conv, state, sendsOk = true) {
   // search/match (topic_changed) or a viewed founder profile ends the mentor list.
   if (state.sherpa_results) draft.sherpa_results = state.sherpa_results;
   else if (state.topic_changed || (state.focus && sendsOk)) delete draft.sherpa_results;
+  // Sticky safety register burns down one engine turn at a time (set to 2 when
+  // the self-harm guard fires). Interactive taps don't consume it - only real
+  // conversational turns do, since only those can drift back to a chirpy register.
+  if (draft.safety_recent) {
+    draft.safety_recent -= 1;
+    if (draft.safety_recent <= 0) delete draft.safety_recent;
+  }
   return draft;
 }
 
