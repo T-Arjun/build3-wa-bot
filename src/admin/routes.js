@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const crypto = require('crypto');
 const { supabase } = require('../config/supabase');
 const { env } = require('../config/env');
 const { SHERPAS } = require('../domain/sherpas.data');
@@ -8,11 +9,64 @@ const { AREA_KEYS } = require('../domain/sherpaAreas');
 
 const router = express.Router();
 
+/**
+ * Constant-time string comparison for the admin token. `!==` short-circuits at
+ * the first mismatched character, which is a textbook timing side-channel for
+ * a secret comparison (network jitter makes it hard to exploit remotely, but
+ * it costs nothing to do this properly). Buffers of different lengths still
+ * run a same-length dummy compare so the early-return itself doesn't leak
+ * length information.
+ */
+function tokenMatches(a, b) {
+  const bufA = Buffer.from(String(a || ''));
+  const bufB = Buffer.from(String(b || ''));
+  if (bufA.length !== bufB.length) {
+    crypto.timingSafeEqual(bufA, Buffer.alloc(bufA.length));
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+/**
+ * Minimal in-memory brute-force throttle on the admin token check - there was
+ * previously NO limit at all on failed auth attempts. Scoped to this module
+ * (no new dependency, mirrors the existing in-memory-bounded-state idiom used
+ * by bot/idempotency.js) rather than a general-purpose rate limiter; this
+ * endpoint's only job is to slow down token guessing, not shape traffic.
+ * Keyed by IP when available, falling back to a single global bucket so it
+ * still throttles even if the proxy strips/normalizes source IPs.
+ */
+const MAX_FAILURES = 8;
+const WINDOW_MS = 60_000;
+const failures = new Map(); // key -> { count, resetAt }
+
+function isRateLimited(key) {
+  const now = Date.now();
+  const rec = failures.get(key);
+  if (!rec || now > rec.resetAt) return false;
+  return rec.count >= MAX_FAILURES;
+}
+
+function recordFailure(key) {
+  const now = Date.now();
+  const rec = failures.get(key);
+  if (!rec || now > rec.resetAt) {
+    failures.set(key, { count: 1, resetAt: now + WINDOW_MS });
+  } else {
+    rec.count += 1;
+  }
+}
+
 // ─── Auth ───────────────────────────────────────────────────────────────────
 router.use((req, res, next) => {
   if (!env.adminToken) return res.status(503).send('Admin panel not configured (ADMIN_TOKEN not set).');
+  const key = req.ip || 'global';
+  if (isRateLimited(key)) {
+    return res.status(429).send('Too many attempts. Try again in a minute.');
+  }
   const token = req.query.token || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (token !== env.adminToken) {
+  if (!tokenMatches(token, env.adminToken)) {
+    recordFailure(key);
     if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
     return res.status(401).send(loginHtml());
   }
@@ -131,6 +185,21 @@ router.post('/api/sherpas', async (req, res) => {
   if (!b.slug || !b.name || !b.booking_url) {
     return res.status(400).json({ error: 'slug, name, and booking_url are required' });
   }
+  // Every one of these gets rendered later as a raw href/src (dashboardHtml's
+  // renderBubble, sherpasHtml's table) - with NO scheme check, a `javascript:`
+  // URL saved here becomes a stored XSS that fires in whichever admin session
+  // clicks it (proved live: a booking_url of "javascript:alert(document.
+  // location)" was accepted and would have rendered as <a href="javascript:
+  // ...">). Reject anything that isn't a real http(s) link at the write
+  // boundary - the correct single point of truth, rather than only patching
+  // the render layer.
+  for (const [field, required] of [['booking_url', true], ['linkedin_url', false], ['avatar_url', false]]) {
+    const v = b[field];
+    if (!v) continue;
+    if (!/^https?:\/\//i.test(String(v).trim())) {
+      return res.status(400).json({ error: `${field} must be an http(s) URL` });
+    }
+  }
   const row = {
     slug: String(b.slug).trim(),
     name: String(b.name).trim(),
@@ -175,6 +244,19 @@ router.get('/', (req, res) => {
 router.get('/sherpas', (req, res) => {
   res.send(sherpasHtml(req.query.token));
 });
+
+// Test hooks attached to the router function itself (Express routers ARE
+// callable middleware functions, so this doesn't disturb `app.use('/admin',
+// adminRouter)` at all) - keeps tokenMatches/isValidUrl unit-testable without
+// spinning up a real HTTP server, matching this codebase's existing
+// pure-function-extraction testing convention.
+router._testHooks = {
+  tokenMatches,
+  isValidUrl: (v) => !v || /^https?:\/\//i.test(String(v).trim()),
+  isRateLimited,
+  recordFailure,
+  resetRateLimiter: () => failures.clear(),
+};
 
 module.exports = router;
 
