@@ -7,7 +7,11 @@ const dryRun = process.argv.includes('--dry-run');
 
 runSync({ dryRun })
   .then((stats) => {
-    process.exit(stats.errors.length ? 0 : 0);
+    // Was `? 0 : 0` - always exited success even when founders were skipped,
+    // so a cron/CI wrapper checking the exit code could never see a partial
+    // failure (the errors themselves were already recorded in sync_runs -
+    // this only affects whether the PROCESS exit code reflects that).
+    process.exit(stats.errors.length ? 1 : 0);
   })
   .catch((err) => {
     console.error(err);
