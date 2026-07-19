@@ -97,6 +97,55 @@ function buildTarget(requester, filters, self) {
 }
 
 /**
+ * Turn the model's raw scoring JSON into result cards. Pure/exported so this
+ * is unit-testable without a live API call.
+ *
+ * Two defensive gaps closed here, both matching this codebase's existing
+ * "never trust the model to not repeat itself" doctrine (see tools.js's own
+ * comments on live-repeated model mistakes):
+ * - `parsed.matches || []` doesn't guard a TRUTHY non-array (e.g. the model
+ *   wrapping a single match as an object instead of a one-item array) -
+ *   confirmed live: `{matches:{}}` throws `.filter is not a function`,
+ *   uncaught by the surrounding try/catch since this ran outside it. Fixed
+ *   with the same `Array.isArray` guard already used everywhere else in this
+ *   codebase for exactly this class of LLM-shaped input.
+ * - No defense against the model repeating a candidateIndex (never observed
+ *   live at full 40-candidate scale, but "include ALL candidates" doesn't
+ *   explicitly forbid duplicates either) - a repeat would show the SAME
+ *   founder as two separate cards in one reply. Deduped by slug, keeping the
+ *   first (highest-scored, since matches are sorted after this) occurrence.
+ * @param {object} parsed - the model's parsed JSON response
+ * @param {object[]} candidates - the candidate pool, indexed the same way the prompt described them
+ * @param {boolean} soft - whether this is the non-seeking fallback pool
+ * @returns {object[]} result cards, highest score first
+ */
+function parseMatchResults(parsed, candidates, soft) {
+  const matches = Array.isArray(parsed?.matches) ? parsed.matches : [];
+  const seenSlugs = new Set();
+  const results = [];
+  for (const m of matches) {
+    if (!Number.isInteger(m.candidateIndex) || !candidates[m.candidateIndex]) continue;
+    const c = candidates[m.candidateIndex];
+    if (seenSlugs.has(c.source_slug)) continue;
+    seenSlugs.add(c.source_slug);
+    results.push({
+      slug: c.source_slug,
+      name: c.name,
+      sector: c.sector,
+      city: c.city,
+      startup_name: c.startup_name,
+      startup_idea: c.startup_idea,
+      avatar_url: c.avatar_url,
+      linkedin_url: c.linkedin_url,
+      score: Math.min(100, Math.max(0, Math.round(m.score))),
+      reasons: Array.isArray(m.reasons) ? m.reasons.slice(0, 2) : [],
+      _soft: soft,
+    });
+  }
+  return results.sort((a, b) => b.score - a.score);
+}
+
+/**
  * Constraint-aware cofounder matching.
  * @param {object} filters {sector,city,cohort,stage,skills[]}
  * @param {string|null} requesterSlug
@@ -160,35 +209,28 @@ async function findCofounders(filters = {}, requesterSlug = null, self = null) {
         ),
       { retries: 2, baseMs: 600, label: 'findCofounders' },
     );
+    // Observability tripwire, not a fix: live-verified at the full 40-candidate
+    // cap that gpt-4.1-mini finishes comfortably under budget (2639/4000
+    // tokens, finish_reason "stop"), so this doesn't fire today. But nothing
+    // else in this function would ever surface a silent truncation - a
+    // response cut off mid-array can still happen to parse as valid (shorter)
+    // JSON with zero error - so this is a one-line, zero-cost way to notice if
+    // that combination (larger candidate pool, more verbose model) ever
+    // changes, rather than quietly returning fewer matches than exist.
+    if (completion.choices?.[0]?.finish_reason === 'length') {
+      log.warn(`findCofounders: OpenAI response hit max_tokens (${candidates.length} candidates) - results may be truncated`);
+    }
     parsed = JSON.parse(completion.choices?.[0]?.message?.content || '{}');
   } catch (err) {
     log.error('findCofounders OpenAI error:', err.message);
     throw err;
   }
 
-  const results = (parsed.matches || [])
-    .filter((m) => Number.isInteger(m.candidateIndex) && candidates[m.candidateIndex])
-    .map((m) => {
-      const c = candidates[m.candidateIndex];
-      return {
-        slug: c.source_slug,
-        name: c.name,
-        sector: c.sector,
-        city: c.city,
-        startup_name: c.startup_name,
-        startup_idea: c.startup_idea,
-        avatar_url: c.avatar_url,
-        linkedin_url: c.linkedin_url,
-        score: Math.min(100, Math.max(0, Math.round(m.score))),
-        reasons: Array.isArray(m.reasons) ? m.reasons.slice(0, 2) : [],
-        _soft: soft,
-      };
-    })
-    .sort((a, b) => b.score - a.score);
+  const results = parseMatchResults(parsed, candidates, soft);
 
   await writeCache(requesterSlug, sig, results);
 
   return { results, poolSize: candidates.length, cached: false, tooFew: results.length < 3, soft };
 }
 
-module.exports = { findCofounders, buildTarget };
+module.exports = { findCofounders, buildTarget, parseMatchResults };
