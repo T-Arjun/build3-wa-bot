@@ -1,7 +1,6 @@
 'use strict';
 
 const { supabase } = require('../config/supabase');
-const { COFOUNDER_INTENT } = require('./enums');
 const { locationFilter, normalize, editDistance } = require('./geo');
 const log = require('../lib/logger');
 
@@ -387,33 +386,17 @@ async function fuzzyByName(queryTokens, limit) {
 }
 
 /**
- * Candidate pool for cofounder matching: published founders open to a cofounder
- * (lookingFor overlaps the cofounder-intent set), narrowed by structured filters,
- * excluding the requester.
+ * Candidate pool for cofounder matching: all published founders matching the
+ * structured filters, excluding the requester. `looking_for` is NEVER a gate
+ * on who's included here (blank is the overwhelming majority of the directory
+ * - mostly legacy cohorts that predate the field existing on the source
+ * platform, not people declining to answer) - it only shapes what's honestly
+ * SAID about someone later (see matching.js's lookingForStatus), never
+ * whether they're scored and shown at all. The one exception is an explicit
+ * `'none'` (looking_for contains 'none') - a founder affirmatively opting out
+ * is a real "no", not just missing signal, so those are excluded here.
  */
 async function cofounderCandidates(filters = {}, excludeSlug = null, limit = 40) {
-  let q = supabase()
-    .from('founders')
-    .select(
-      'source_slug,name,city,cohort,sector,skills,traits,dharma,looking_for,' +
-        'startup_name,startup_idea,startup_stage,avatar_url,linkedin_url',
-    )
-    .eq('is_published', true)
-    .overlaps('looking_for', pgArray(COFOUNDER_INTENT));
-  q = applyFilters(q, filters);
-  if (excludeSlug) q = q.neq('source_slug', excludeSlug);
-  const { data, error } = await q.limit(limit);
-  if (error) throw new Error(`cofounderCandidates: ${error.message}`);
-  return dedupeFounders(data || []);
-}
-
-/**
- * Fallback pool when nobody matching the filters has explicitly set cofounder
- * intent: all published founders matching the filters, EXCLUDING those who
- * explicitly opted out (looking_for contains 'none'). Founders who left
- * looking_for blank are included - blank means "unspecified", not "no".
- */
-async function candidatesByFilters(filters = {}, excludeSlug = null, limit = 40) {
   let q = supabase()
     .from('founders')
     .select(
@@ -425,7 +408,7 @@ async function candidatesByFilters(filters = {}, excludeSlug = null, limit = 40)
   q = applyFilters(q, filters);
   if (excludeSlug) q = q.neq('source_slug', excludeSlug);
   const { data, error } = await q.limit(limit);
-  if (error) throw new Error(`candidatesByFilters: ${error.message}`);
+  if (error) throw new Error(`cofounderCandidates: ${error.message}`);
   return dedupeFounders(data || []);
 }
 
@@ -437,7 +420,6 @@ module.exports = {
   findByName,
   buildNamePatterns,
   cofounderCandidates,
-  candidatesByFilters,
   dedupeFounders,
   namesSimilar,
   isShowable,

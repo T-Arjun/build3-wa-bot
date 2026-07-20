@@ -164,7 +164,6 @@ function toolResultSummary(r) {
   if (r.total != null) parts.push(`total=${r.total}`);
   if (r.poolSize != null) parts.push(`pool=${r.poolSize}`);
   if (Array.isArray(r.candidates)) parts.push(`candidates=${r.candidates.length}`);
-  if (r.soft) parts.push('soft');
   return parts.join(' ');
 }
 

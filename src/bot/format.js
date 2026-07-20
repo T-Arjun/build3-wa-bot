@@ -202,6 +202,11 @@ function matchCaption(m) {
     lines.push(m.city);
   }
   for (const r of m.reasons || []) lines.push(`• ${r}`);
+  // Honest per-person disclosure, baked into the card itself rather than left
+  // to the model to remember: what THIS founder actually said about cofounder
+  // intent (blank/unspecified is the majority case in the live directory, not
+  // a "no" - see matching.js's lookingForStatus for the full mapping).
+  if (m.lookingForStatus) lines.push(`(${m.lookingForStatus})`);
   // The whole point of a cofounder match is being able to actually reach out -
   // making the user ask again ("show me his profile") just to get the
   // LinkedIn link is friction with no upside, so it rides on the match card

@@ -162,34 +162,30 @@ const SHOWN_NOTE =
   'The full profile card (photo + startup, sector, city, skills, LinkedIn) has ALREADY been sent to the user. Do NOT offer to show the profile again. Keep any text to a one-line confirmation; you may offer "similar founders".';
 
 const MATCH_SHOWN_NOTE =
-  'Your text reply is sent FIRST, then the match cards appear below it as photo cards, and each card ALREADY carries their LinkedIn link at the bottom - the user can reach out right away, no follow-up needed. Photo cards are NOT tappable - NEVER tell the user to "tap the card", and never say you\'ll "pull up their LinkedIn" as if it takes another step - it\'s already on the card they\'re looking at. Write a warm 1-2 line lead-in (why these people); you may still offer their FULL profile (photo, all details) on request. If the user\'s message asked anything else too, answer that part in the same reply.';
+  'Your text reply is sent FIRST, then the match cards appear below it as photo cards, and each card ALREADY carries their LinkedIn link at the bottom - the user can reach out right away, no follow-up needed. Each card ALSO already discloses that specific person\'s real cofounder-seeking status in parentheses (some are actively building and open to it, some haven\'t said either way, some are only open to joining rather than co-founding) - this varies PER PERSON in the batch, so do NOT assert in your lead-in that "these are all actively seeking a cofounder" or similar; a neutral framing ("worth a look" / "a few people worth reaching out to") is safer than a blanket claim, and never repeat or restate what a card\'s status line already says. Photo cards are NOT tappable - NEVER tell the user to "tap the card", and never say you\'ll "pull up their LinkedIn" as if it takes another step - it\'s already on the card they\'re looking at. Write a warm 1-2 line lead-in (why these people); you may still offer their FULL profile (photo, all details) on request. If the user\'s message asked anything else too, answer that part in the same reply.';
 
 const LIST_SHOWN_NOTE =
   'Your text reply is sent FIRST, then the interactive list/cards appear right below it. Write a warm, helpful lead-in (1-2 short sentences, build3 tone) that frames what they are about to see and invites them to tap. Do NOT enumerate or repeat the names/items - the list already shows them; repeating them is the mistake to avoid. IMPORTANT: if the user\'s message also asked something ELSE besides this search (another question or need), answer that part too in the same reply, even in one line; never silently drop a part of their message.';
 
 /**
  * Deterministic, honest lead-in for a cofounder match that had to widen past
- * the sector/city the user actually asked for (or fell back to non-seeking
- * "soft" connects). Sent as a real message from the CODE, not left to the
- * model - a text `note` asking it to "disclose this honestly" was tried first
- * and the model did not reliably comply live (e.g. calling a widened-past-
- * fintech match "a fintech cofounder match" for an unrelated sector).
+ * the sector/city the user actually asked for. Sent as a real message from
+ * the CODE, not left to the model - a text `note` asking it to "disclose this
+ * honestly" was tried first and the model did not reliably comply live (e.g.
+ * calling a widened-past-fintech match "a fintech cofounder match" for an
+ * unrelated sector). Cofounder-intent honesty (blank/service-provider/etc.)
+ * is a separate, per-candidate concern now handled on each card itself - see
+ * matching.js's lookingForStatus and format.js's matchCaption.
  */
-function widenedSearchDisclosure(dropped, filters, soft) {
+function widenedSearchDisclosure(dropped, filters) {
   const droppedBits = [];
   if (dropped.includes('city') && filters.city) droppedBits.push(filters.city);
   if (dropped.includes('sector') && filters.sector) droppedBits.push(filters.sector);
   const droppedText = droppedBits.join(' + ');
 
-  let body = droppedText
+  return droppedText
     ? `no strong ${droppedText} match, so here's from the wider community instead:`
     : "here's from the wider community instead:";
-  if (soft) {
-    body +=
-      " (heads up, these folks haven't marked themselves as actively looking for a cofounder, " +
-      "but worth a conversation if you like):";
-  }
-  return body;
 }
 
 /** Tool implementations. Each receives (args, ctx) and returns a summary object for the model. */
@@ -358,9 +354,11 @@ const impls = {
   async find_cofounders(args, ctx) {
     const filters = toFilters(args);
     // No hard "need criteria" gate - a broad search returns sensible results
-    // (cofounder-seekers, or soft fallback). The engine clarifies at most once
-    // at the conversation layer; once the user wants results, we always show some.
-    let { results, poolSize, tooFew, soft } = await findCofounders(filters, ctx.requesterSlug, ctx.self);
+    // regardless of who's explicitly marked themselves as cofounder-seeking
+    // (looking_for is never a pool gate - see cofounderCandidates). The engine
+    // clarifies at most once at the conversation layer; once the user wants
+    // results, we always show some.
+    let { results, poolSize, tooFew } = await findCofounders(filters, ctx.requesterSlug, ctx.self);
     let dropped = [];
     // Deterministic backstop (don't rely on the model alone - it has repeated
     // this exact mistake live, MULTIPLE times now: dropping a filter and then
@@ -386,7 +384,7 @@ const impls = {
       for (const { label, ...drop } of attempts) {
         const wider = await findCofounders({ ...filters, ...drop }, ctx.requesterSlug, ctx.self);
         if (wider.poolSize > 0 && wider.results.length > 0) {
-          ({ results, poolSize, tooFew, soft } = wider);
+          ({ results, poolSize, tooFew } = wider);
           dropped = Object.keys(drop);
           break;
         }
@@ -408,8 +406,8 @@ const impls = {
         note: "Everyone matching these EXACT criteria was already shown. Do NOT dead-end and do NOT re-send their cards. Offer to WIDEN the pool (a nearby city, open-to-remote, or an adjacent sector) while KEEPING the core skill/role they asked for. Never suggest switching to a different core skill.",
       };
     }
-    if (dropped.length || soft) {
-      ctx.outbox.push({ kind: 'text', body: widenedSearchDisclosure(dropped, filters, soft) });
+    if (dropped.length) {
+      ctx.outbox.push({ kind: 'text', body: widenedSearchDisclosure(dropped, filters) });
     }
     const top = fresh.slice(0, 3);
     for (const m of top) {
@@ -428,7 +426,6 @@ const impls = {
     }
     return {
       status: 'ok',
-      soft,
       widened: dropped.length ? dropped : undefined,
       shown: top.length,
       total: fresh.length,

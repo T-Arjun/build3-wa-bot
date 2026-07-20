@@ -49,7 +49,7 @@ test('protected: tool-choice and matching sections are still present', () => {
   assert.match(P, /MENTOR HOURS \(list_mentors \/ get_mentor\)/);
   assert.match(P, /TURNING WHAT THEY SAY INTO A SEARCH/);
   assert.match(P, /PERSONALIZING COFOUNDER MATCHES/);
-  assert.match(P, /SOFT MATCHES:/);
+  assert.match(P, /COFOUNDER-INTENT HONESTY:/);
 });
 
 test('protected: acting-vs-clarifying threshold is unchanged', () => {

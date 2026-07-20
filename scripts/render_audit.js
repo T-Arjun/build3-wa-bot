@@ -14,6 +14,7 @@ require('dotenv').config();
 const { supabase } = require('../src/config/supabase');
 const fmt = require('../src/bot/format');
 const { MENTORS } = require('../src/domain/mentors.data');
+const { lookingForStatus } = require('../src/domain/matching');
 
 const WA_LIMITS = { rowTitle: 24, rowDesc: 72, caption: 1024, body: 1024 };
 const JUNK = /\b(undefined|null|NaN)\b|\*\s*\*|(^|\s)(na|n\/a|tbd)(\s|$|\.)/i;
@@ -55,8 +56,15 @@ function auditProfile(f) {
 }
 
 function auditMatch(f) {
-  const cap = fmt.matchCaption({ ...f, score: 80, reasons: ['x'] });
+  // Exercise the real per-candidate cofounder-intent line against every
+  // founder's ACTUAL looking_for value, not a stubbed one - this is the one
+  // surface where a raw founder row doesn't already carry the computed field
+  // (matching.js only computes it inside parseMatchResults), so it must be
+  // derived here or this audit silently never touches the new line at all.
+  const cap = fmt.matchCaption({ ...f, score: 80, reasons: ['x'], lookingForStatus: lookingForStatus(f.looking_for) });
   if (JUNK.test(cap)) flag('match', f.source_slug, 'placeholder junk', cap.split('\n').find((l) => JUNK.test(l)));
+  const statusLine = cap.split('\n').find((l) => l.startsWith('('));
+  if (!statusLine) flag('match', f.source_slug, 'missing cofounder-intent status line', cap.slice(0, 80));
 }
 
 function auditMentor(s) {

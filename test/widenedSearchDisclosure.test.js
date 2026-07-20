@@ -13,28 +13,17 @@ const { widenedSearchDisclosure } = require('../src/bot/tools');
 // model can't omit or contradict it.
 
 test('sector dropped: names the actual sector that had no match', () => {
-  const body = widenedSearchDisclosure(['sector'], { city: 'Bengaluru', sector: 'Financial Services' }, false);
+  const body = widenedSearchDisclosure(['sector'], { city: 'Bengaluru', sector: 'Financial Services' });
   assert.match(body, /no strong Financial Services match/);
   assert.doesNotMatch(body, /Bengaluru/); // city was NOT dropped, so it's not named as unmatched
 });
 
 test('city dropped: names the actual city that had no match', () => {
-  const body = widenedSearchDisclosure(['city'], { city: 'Bengaluru', sector: 'Financial Services' }, false);
+  const body = widenedSearchDisclosure(['city'], { city: 'Bengaluru', sector: 'Financial Services' });
   assert.match(body, /no strong Bengaluru match/);
 });
 
 test('both dropped: names both', () => {
-  const body = widenedSearchDisclosure(['city', 'sector'], { city: 'Bengaluru', sector: 'Financial Services' }, false);
+  const body = widenedSearchDisclosure(['city', 'sector'], { city: 'Bengaluru', sector: 'Financial Services' });
   assert.match(body, /Bengaluru \+ Financial Services/);
-});
-
-test('soft match adds the not-actively-seeking caveat', () => {
-  const body = widenedSearchDisclosure([], {}, true);
-  assert.match(body, /haven't marked themselves as actively looking/);
-});
-
-test('dropped + soft combine into one message', () => {
-  const body = widenedSearchDisclosure(['sector'], { sector: 'Financial Services' }, true);
-  assert.match(body, /no strong Financial Services match/);
-  assert.match(body, /haven't marked themselves as actively looking/);
 });

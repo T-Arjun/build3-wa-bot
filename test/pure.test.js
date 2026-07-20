@@ -284,6 +284,20 @@ test('matchCaption carries the LinkedIn link, same as a full profile card', () =
   assert.doesNotMatch(noLinkedin, /linkedin/i);
 });
 
+test('matchCaption bakes in the per-candidate cofounder-intent status line', () => {
+  const fmt = require('../src/bot/format');
+  const withStatus = fmt.matchCaption({
+    name: 'Priya',
+    score: 80,
+    reasons: ['directly complements with sales skills'],
+    lookingForStatus: "hasn't said either way, worth asking directly",
+  });
+  assert.match(withStatus, /\(hasn't said either way, worth asking directly\)/);
+  // No status computed (shouldn't happen in practice, but must not render a blank paren)
+  const noStatus = fmt.matchCaption({ name: 'X', score: 70, reasons: [] });
+  assert.doesNotMatch(noStatus, /\(\)/);
+});
+
 test('avatarFor never yields an SVG WhatsApp would silently drop', () => {
   const fmt = require('../src/bot/format');
   // photoless founders in the source carry a ui-avatars SVG URL, not null

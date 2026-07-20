@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { openai } = require('../config/openai');
 const { env } = require('../config/env');
 const { supabase } = require('../config/supabase');
-const { cofounderCandidates, candidatesByFilters, getBySlug } = require('./founders');
+const { cofounderCandidates, getBySlug } = require('./founders');
 const { buildSystemPrompt, buildUserPrompt } = require('./matchingPrompt');
 const { withRetry } = require('../lib/retry');
 const log = require('../lib/logger');
@@ -97,6 +97,34 @@ function buildTarget(requester, filters, self) {
 }
 
 /**
+ * Honest, per-candidate line about what THIS founder actually said about
+ * cofounder intent - never a batch-wide assumption. `looking_for` is
+ * multi-select, so when more than one value is set, the most cofounder-
+ * relevant one wins (checked in this priority order). Blank/unspecified is
+ * the majority case in the live directory (mostly legacy cohorts that
+ * predate this field existing on the source platform, not people declining
+ * to answer) - it gets an honest "hasn't said" line, not a exclusion and not
+ * a confident claim either way. A founder who explicitly opted out
+ * ('none') never reaches here - excluded at the SQL layer in founders.js.
+ */
+function lookingForStatus(lookingFor) {
+  const lf = Array.isArray(lookingFor) ? lookingFor : [];
+  if (lf.includes('co-founder, I have a startup')) {
+    return 'already running something and open to a cofounder for it';
+  }
+  if (lf.includes("co-founder, I don't have a startup")) {
+    return 'looking to join someone as a cofounder';
+  }
+  if (lf.includes('join a startup')) {
+    return 'open to joining a startup, not necessarily as a cofounder';
+  }
+  if (lf.includes('service providers')) {
+    return 'listed as a service provider, but might still be worth a conversation';
+  }
+  return "hasn't said either way, worth asking directly";
+}
+
+/**
  * Turn the model's raw scoring JSON into result cards. Pure/exported so this
  * is unit-testable without a live API call.
  *
@@ -116,10 +144,9 @@ function buildTarget(requester, filters, self) {
  *   first (highest-scored, since matches are sorted after this) occurrence.
  * @param {object} parsed - the model's parsed JSON response
  * @param {object[]} candidates - the candidate pool, indexed the same way the prompt described them
- * @param {boolean} soft - whether this is the non-seeking fallback pool
  * @returns {object[]} result cards, highest score first
  */
-function parseMatchResults(parsed, candidates, soft) {
+function parseMatchResults(parsed, candidates) {
   const matches = Array.isArray(parsed?.matches) ? parsed.matches : [];
   const seenSlugs = new Set();
   const results = [];
@@ -139,7 +166,7 @@ function parseMatchResults(parsed, candidates, soft) {
       linkedin_url: c.linkedin_url,
       score: Math.min(100, Math.max(0, Math.round(m.score))),
       reasons: Array.isArray(m.reasons) ? m.reasons.slice(0, 2) : [],
-      _soft: soft,
+      lookingForStatus: lookingForStatus(c.looking_for),
     });
   }
   return results.sort((a, b) => b.score - a.score);
@@ -158,30 +185,18 @@ async function findCofounders(filters = {}, requesterSlug = null, self = null) {
 
   const cached = await readCache(requesterSlug, sig);
   if (cached) {
-    // `soft` (whether these are confirmed cofounder-seekers or a fallback of
-    // non-seeking founders worth a conversation) used to be lost on a cache
-    // hit, silently downgrading the "heads up, they haven't marked themselves
-    // as looking" disclosure for anyone who hit the cached path. Tagged on
-    // each cached result (mirrors the existing `_fuzzy` convention in
-    // founders.js) so it survives the round trip.
-    const soft = cached.length > 0 && cached.every((r) => r._soft === true);
-    return { results: cached, poolSize: cached.length, cached: true, tooFew: cached.length < 3, soft };
+    return { results: cached, poolSize: cached.length, cached: true, tooFew: cached.length < 3 };
   }
 
   const requester = requesterSlug ? await getBySlug(requesterSlug) : null;
 
-  // Prefer founders who explicitly seek a cofounder; if none match the filters,
-  // fall back to all founders matching the filters (soft match) so we surface
-  // people worth a conversation rather than returning nothing.
-  let candidates = await cofounderCandidates(filters, requesterSlug, 40);
-  let soft = false;
-  if (candidates.length === 0) {
-    candidates = await candidatesByFilters(filters, requesterSlug, 40);
-    soft = true;
-  }
+  // One pool: everyone published matching the filters. looking_for is never a
+  // gate here (see cofounderCandidates' own doc comment) - it only shapes the
+  // per-result lookingForStatus line, never who's scored and shown.
+  const candidates = await cofounderCandidates(filters, requesterSlug, 40);
 
   if (candidates.length === 0) {
-    return { results: [], poolSize: 0, cached: false, tooFew: true, soft: false };
+    return { results: [], poolSize: 0, cached: false, tooFew: true };
   }
 
   const target = buildTarget(requester, filters, effectiveSelf);
@@ -226,11 +241,11 @@ async function findCofounders(filters = {}, requesterSlug = null, self = null) {
     throw err;
   }
 
-  const results = parseMatchResults(parsed, candidates, soft);
+  const results = parseMatchResults(parsed, candidates);
 
   await writeCache(requesterSlug, sig, results);
 
-  return { results, poolSize: candidates.length, cached: false, tooFew: results.length < 3, soft };
+  return { results, poolSize: candidates.length, cached: false, tooFew: results.length < 3 };
 }
 
-module.exports = { findCofounders, buildTarget, parseMatchResults };
+module.exports = { findCofounders, buildTarget, parseMatchResults, lookingForStatus };
