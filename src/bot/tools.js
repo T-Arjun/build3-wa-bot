@@ -71,10 +71,11 @@ const definitions = [
     function: {
       name: 'set_self_profile',
       description:
-        "Record what the USER says about THEMSELVES - their OWN skills, sector, city, stage, or role - so cofounder matches are scored as complementary to them (not just filtered). Call this whenever the user reveals their own background, e.g. \"I'm a technical founder\", \"I can do sales and growth\", \"I'm building a fintech in Bangalore\". This is about the user themselves, NOT about who they are looking for.",
+        "Record what the USER says about THEMSELVES - their OWN name, skills, sector, city, stage, or role - so cofounder matches are scored as complementary to them (not just filtered) and so we can greet them by name going forward. Call this whenever the user reveals their own background, e.g. \"I'm a technical founder\", \"I can do sales and growth\", \"I'm building a fintech in Bangalore\", or tells you their name. This is about the user themselves, NOT about who they are looking for.",
       parameters: {
         type: 'object',
         properties: {
+          name: { type: 'string', description: "the user's own first name, once they've told you" },
           skills: { type: 'array', items: { type: 'string' }, description: "the user's OWN skills" },
           sector: { type: 'string', enum: SECTORS },
           city: { type: 'string' },
@@ -442,6 +443,7 @@ const impls = {
 
   async set_self_profile(args, ctx) {
     const self = { ...(ctx.self || {}) };
+    if (args.name) self.name = args.name;
     if (Array.isArray(args.skills) && args.skills.length) self.skills = args.skills;
     if (args.sector) self.sector = args.sector;
     if (args.city) self.city = args.city;

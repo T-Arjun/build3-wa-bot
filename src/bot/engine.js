@@ -21,6 +21,7 @@ async function run(input) {
     waId: input.waId || null,
     requesterSlug: input.requesterSlug || null,
     requesterName: input.requesterName || null,
+    nameConfirmed: !!input.nameConfirmed,
     self: input.self || null,
     prevMatchSlugs: input.prevMatchSlugs || [],
     focusSlug: input.focus?.slug || null,
@@ -30,11 +31,36 @@ async function run(input) {
     rawText: input.text || '',
   };
 
-  const identity = ctx.requesterSlug
-    ? `The user is a known founder${ctx.requesterName ? ` named ${ctx.requesterName}` : ''} (slug: ${ctx.requesterSlug}).`
-    : `The user is not yet linked to a founder profile${ctx.requesterName ? ` (WhatsApp name: ${ctx.requesterName})` : ''}.`;
-
   const history = Array.isArray(input.history) ? input.history : [];
+  // Each completed turn appends a user+assistant pair, so history.length/2 is
+  // how many replies we've already sent. A "casually ask for their name
+  // sometime soon" instruction alone was empirically unreliable live across
+  // several test conversations (idle chat included) - the model always found
+  // something else to prioritize and never asked. Turn count makes the WHEN
+  // deterministic (matches this codebase's doctrine of not trusting the model
+  // to remember soft, un-timed asks) while leaving the actual phrasing to the
+  // model, so it still reads as natural rather than a scripted extra message.
+  const priorTurns = Math.floor(history.length / 2);
+
+  let identity;
+  if (ctx.requesterSlug) {
+    identity = `The user is a known founder${ctx.requesterName ? ` named ${ctx.requesterName}` : ''} (slug: ${ctx.requesterSlug}).`;
+  } else if (ctx.nameConfirmed) {
+    identity = `The user is not yet linked to a founder profile. They told us their name is ${ctx.requesterName} - use it naturally.`;
+  } else {
+    const displayNameNote = ctx.requesterName
+      ? `WhatsApp shows a display name of "${ctx.requesterName}" but that's just app metadata, not confirmed as their real name (could be a nickname, emoji, or business name) - don't treat it as confirmed and don't greet them with it.`
+      : "We have no name for them at all.";
+    if (priorTurns >= 2) {
+      identity =
+        `The user is not yet linked to a founder profile and still hasn't told us their name after ${priorTurns} replies. ${displayNameNote} ` +
+        'Make asking for their name your ONE question THIS reply, phrased naturally (e.g. weave it into whatever you\'re already saying, "by the way, what should I call you?") - unless they just asked you something that genuinely needs a direct answer first, in which case answer that and ask next turn instead. Once they answer, call set_self_profile({name}) and don\'t ask again this conversation.';
+    } else {
+      identity =
+        `The user is not yet linked to a founder profile and hasn't told us their name yet. ${displayNameNote} ` +
+        'No need to ask this turn - focus on what they actually asked. Once they tell you their name (now or later), call set_self_profile({name}).';
+    }
+  }
   const messages = [
     { role: 'system', content: systemPrompt() },
     { role: 'system', content: identity },

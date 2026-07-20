@@ -105,11 +105,16 @@ function renderOutbox(outbox) {
     const text = String(turn);
     console.log(`\nUSER: ${text}`);
     const started = Date.now();
+    // Mirror handler.js's real name-confirmation logic: a name the user gave
+    // via set_self_profile (persisted in conv.draft.self.name across turns) is
+    // confirmed; the --name flag simulates the unreliable WhatsApp display name.
+    const confirmedName = conv.draft?.self?.name || null;
     const { outbox, finalText, state, assistantSummary } = await engine.run({
       text,
       waId: 'convo-test',
       requesterSlug: null,
-      requesterName: name,
+      requesterName: confirmedName || name,
+      nameConfirmed: !!confirmedName,
       history: conv.history,
       focus: conv.draft?.focus || null,
       self: conv.draft?.self || null,

@@ -110,7 +110,12 @@ async function processEvent(ev) {
   const conv = await getConversation(to);
   const founder = await founders.findByWaId(to);
   const requesterSlug = founder?.source_slug || conv.founder_slug || null;
-  const requesterName = founder?.name || ev.name || null;
+  // A linked founder profile or a name the user actually told us (via
+  // set_self_profile) is a confirmed identity - the WhatsApp display name is
+  // just metadata Meta sends (often a nickname, emoji, or business name, not
+  // their real name), so it's the last resort, never treated as confirmed.
+  const confirmedName = founder?.name || conv.draft?.self?.name || null;
+  const requesterName = confirmedName || ev.name || null;
 
   // Persist resolved identity early.
   const baseState = { founder_slug: requesterSlug };
@@ -178,6 +183,7 @@ async function processEvent(ev) {
       waId: to,
       requesterSlug,
       requesterName,
+      nameConfirmed: !!confirmedName,
       history,
       focus: conv.draft?.focus || null,
       self: conv.draft?.self || null,
