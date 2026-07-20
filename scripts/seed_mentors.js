@@ -2,21 +2,22 @@
 
 /* eslint-disable no-console */
 /**
- * Seed / refresh the `sherpas` table from the canonical dataset in
- * src/domain/sherpas.data.js. Idempotent: upserts on `slug`, so re-running
+ * Seed / refresh the `mentors` table from the canonical dataset in
+ * src/domain/mentors.data.js. Idempotent: upserts on `slug`, so re-running
  * updates existing mentors and adds new ones without duplicating.
  *
- *   node scripts/seed_sherpas.js
+ *   node scripts/seed_mentors.js
  *
- * Requires the `sherpas` table to exist (apply supabase/migrations/0004_sherpas.sql
- * first). If the table is missing, this prints the migration path and exits 1.
+ * Requires the `mentors` table to exist (apply supabase/migrations/0004_sherpas.sql
+ * then 0008_rename_sherpas_to_mentors.sql first). If the table is missing, this
+ * prints the migration path and exits 1.
  */
 require('dotenv').config();
 const { supabase } = require('../src/config/supabase');
-const { SHERPAS } = require('../src/domain/sherpas.data');
+const { MENTORS } = require('../src/domain/mentors.data');
 
 async function main() {
-  const rows = SHERPAS.map((s) => ({
+  const rows = MENTORS.map((s) => ({
     slug: s.slug,
     name: s.name,
     expertise: s.expertise,
@@ -31,21 +32,22 @@ async function main() {
   }));
 
   const { data, error } = await supabase()
-    .from('sherpas')
+    .from('mentors')
     .upsert(rows, { onConflict: 'slug' })
     .select('slug');
 
   if (error) {
     console.error('Seed failed:', error.message);
-    if (/relation .*sherpas.* does not exist|Could not find the table/i.test(error.message)) {
-      console.error('\nThe sherpas table does not exist yet. Apply the migration first:');
+    if (/relation .*mentors.* does not exist|Could not find the table/i.test(error.message)) {
+      console.error('\nThe mentors table does not exist yet. Apply the migrations first:');
       console.error('  supabase/migrations/0004_sherpas.sql');
+      console.error('  supabase/migrations/0008_rename_sherpas_to_mentors.sql');
       console.error('(paste it into the Supabase SQL editor, or run it via psql).');
     }
     process.exit(1);
   }
 
-  console.log(`Seeded ${data.length} sherpas:`);
+  console.log(`Seeded ${data.length} mentors:`);
   for (const r of data) console.log('  •', r.slug);
 }
 

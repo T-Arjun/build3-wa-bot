@@ -1,14 +1,14 @@
 'use strict';
 
 const { supabase } = require('../config/supabase');
-const { SHERPAS } = require('./sherpas.data');
-const { AREA_KEYS, areaLabel } = require('./sherpaAreas');
+const { MENTORS } = require('./mentors.data');
+const { AREA_KEYS, areaLabel } = require('./mentorAreas');
 const log = require('../lib/logger');
 
 /**
- * Mentor ("Sherpa") directory queries. Source of truth is the Supabase `sherpas`
+ * Mentor directory queries. Source of truth is the Supabase `mentors`
  * table; if it's missing or empty (e.g. migration not yet applied), we fall back
- * to the static seed in sherpas.data.js so the feature works regardless. The
+ * to the static seed in mentors.data.js so the feature works regardless. The
  * pure helpers below hold the filtering/ranking logic and are unit-tested
  * directly against an in-memory array (no DB).
  */
@@ -18,11 +18,11 @@ const COLUMNS =
 
 let warnedFallback = false;
 
-/** All active sherpas, ordered. Reads the table; falls back to the static seed. */
+/** All active mentors, ordered. Reads the table; falls back to the static seed. */
 async function loadAll() {
   try {
     const { data, error } = await supabase()
-      .from('sherpas')
+      .from('mentors')
       .select(COLUMNS)
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
@@ -31,7 +31,7 @@ async function loadAll() {
     if (data && data.length) return data;
   } catch (e) {
     if (!warnedFallback) {
-      log.warn(`sherpas: using static seed (table unavailable: ${e.message})`);
+      log.warn(`mentors: using static seed (table unavailable: ${e.message})`);
       warnedFallback = true;
     }
   }
@@ -39,7 +39,7 @@ async function loadAll() {
 }
 
 function staticActive() {
-  return SHERPAS.filter((s) => s.is_active !== false).slice().sort(byOrder);
+  return MENTORS.filter((s) => s.is_active !== false).slice().sort(byOrder);
 }
 
 function byOrder(a, b) {
@@ -50,33 +50,33 @@ function byOrder(a, b) {
 
 // ─── Pure helpers (unit-tested directly) ─────────────────────────────────────
 
-/** Expertise areas that actually have ≥1 sherpa, in taxonomy order, with counts. */
-function areasWithCounts(sherpas) {
+/** Expertise areas that actually have ≥1 mentor, in taxonomy order, with counts. */
+function areasWithCounts(mentors) {
   return AREA_KEYS.map((key) => ({
     key,
     label: areaLabel(key),
-    count: sherpas.filter((s) => (s.areas || []).includes(key)).length,
+    count: mentors.filter((s) => (s.areas || []).includes(key)).length,
   })).filter((a) => a.count > 0);
 }
 
-/** Active sherpas tagged with an area key, ordered. */
-function filterByArea(sherpas, areaKey) {
-  return sherpas.filter((s) => (s.areas || []).includes(areaKey)).sort(byOrder);
+/** Active mentors tagged with an area key, ordered. */
+function filterByArea(mentors, areaKey) {
+  return mentors.filter((s) => (s.areas || []).includes(areaKey)).sort(byOrder);
 }
 
 /**
  * Loose search for free-text ("who can help with pricing?"), the proactive path,
- * AND explicit by-name booking ("book varun"). Scores each sherpa by how many
+ * AND explicit by-name booking ("book varun"). Scores each mentor by how many
  * query tokens appear in their NAME, expertise blurb, or area labels; a name hit
  * weighs more so "book varun" resolves to that mentor. Returns matches best-first.
  */
-function matchByExpertise(sherpas, text) {
+function matchByExpertise(mentors, text) {
   const tokens = String(text || '')
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((t) => t.length >= 3);
   if (!tokens.length) return [];
-  const scored = sherpas
+  const scored = mentors
     .map((s) => {
       const name = String(s.name || '').toLowerCase();
       const hay = `${s.expertise} ${(s.areas || []).map(areaLabel).join(' ')} ${(s.areas || []).join(' ')}`.toLowerCase();
@@ -97,7 +97,7 @@ async function listAreas() {
   return areasWithCounts(await loadAll());
 }
 
-/** All active sherpas (for deterministic name grounding in the engine). */
+/** All active mentors (for deterministic name grounding in the engine). */
 async function listAll() {
   return loadAll();
 }

@@ -27,9 +27,9 @@ test('skepticism and insults each have a distinct posture', () => {
   assert.match(P, /Never threaten consequences you can't enforce/);
 });
 
-test('venting rule holds space and blocks the proactive Sherpa offer', () => {
+test('venting rule holds space and blocks the proactive mentor offer', () => {
   assert.match(P, /VENTING \(/);
-  assert.match(P, /NO founder search, NO Sherpa offer/);
+  assert.match(P, /NO founder search, NO mentor offer/);
   // the proactive rule itself must carry the venting carve-out
   assert.match(P, /VENTING about the stress of it rather than asking how to solve it/);
 });
@@ -38,7 +38,7 @@ test('thin results are framed honestly, never padded', () => {
   assert.match(P, /ONE strong match beats a padded list/);
 });
 
-// ─── Protected sections (matching / search / sherpa) must stay intact ───────
+// ─── Protected sections (matching / search / mentor) must stay intact ───────
 // These are tripwires: if a future prompt edit deletes or renames one of these
 // load-bearing sections, the conversational engine change has gone out of its
 // lane and this test fails before anything deploys.
@@ -46,7 +46,7 @@ test('thin results are framed honestly, never padded', () => {
 test('protected: tool-choice and matching sections are still present', () => {
   assert.match(P, /THEM vs WHO THEY WANT/);
   assert.match(P, /CHOOSING search_founders vs find_cofounders/);
-  assert.match(P, /SHERPA HOURS \(list_sherpas \/ get_sherpa\)/);
+  assert.match(P, /MENTOR HOURS \(list_mentors \/ get_mentor\)/);
   assert.match(P, /TURNING WHAT THEY SAY INTO A SEARCH/);
   assert.match(P, /PERSONALIZING COFOUNDER MATCHES/);
   assert.match(P, /SOFT MATCHES:/);

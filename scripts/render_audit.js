@@ -2,7 +2,7 @@
 
 /* eslint-disable no-console */
 /**
- * Render audit: run EVERY founder + sherpa through EVERY user-facing render
+ * Render audit: run EVERY founder + mentor through EVERY user-facing render
  * surface and flag broken output. This is the "how does it actually look"
  * regression net: placeholder junk, empty fields leaking, over-limit strings
  * WhatsApp will truncate, ugly separators, dangling labels.
@@ -13,7 +13,7 @@
 require('dotenv').config();
 const { supabase } = require('../src/config/supabase');
 const fmt = require('../src/bot/format');
-const { SHERPAS } = require('../src/domain/sherpas.data');
+const { MENTORS } = require('../src/domain/mentors.data');
 
 const WA_LIMITS = { rowTitle: 24, rowDesc: 72, caption: 1024, body: 1024 };
 const JUNK = /\b(undefined|null|NaN)\b|\*\s*\*|(^|\s)(na|n\/a|tbd)(\s|$|\.)/i;
@@ -59,12 +59,12 @@ function auditMatch(f) {
   if (JUNK.test(cap)) flag('match', f.source_slug, 'placeholder junk', cap.split('\n').find((l) => JUNK.test(l)));
 }
 
-function auditSherpa(s) {
-  const card = fmt.sherpaCard(s);
-  if (JUNK.test(card)) flag('sherpaCard', s.slug, 'placeholder junk', card);
-  const row = fmt.sherpaRow(s);
-  if (row.title.length > WA_LIMITS.rowTitle) flag('sherpaRow', s.slug, `title >${WA_LIMITS.rowTitle}`, row.title);
-  if (!row.description) flag('sherpaRow', s.slug, 'empty description', row.title);
+function auditMentor(s) {
+  const card = fmt.mentorCard(s);
+  if (JUNK.test(card)) flag('mentorCard', s.slug, 'placeholder junk', card);
+  const row = fmt.mentorRow(s);
+  if (row.title.length > WA_LIMITS.rowTitle) flag('mentorRow', s.slug, `title >${WA_LIMITS.rowTitle}`, row.title);
+  if (!row.description) flag('mentorRow', s.slug, 'empty description', row.title);
 }
 
 (async () => {
@@ -80,10 +80,10 @@ function auditSherpa(s) {
     auditMatch(f);
     auditAvatar(f);
   }
-  for (const s of SHERPAS) auditSherpa(s);
+  for (const s of MENTORS) auditMentor(s);
 
   // Summary
-  console.log(`audited ${founders.length} founders x 3 surfaces + ${SHERPAS.length} sherpas`);
+  console.log(`audited ${founders.length} founders x 3 surfaces + ${MENTORS.length} mentors`);
   if (!defects.length) {
     console.log('NO DEFECTS 🎉');
   } else {

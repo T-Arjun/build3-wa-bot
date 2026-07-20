@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * Canonical seed for the build3 mentor ("Sherpa") directory, transcribed from
- * the "Book Sherpa Hours" program page. This is both the input to the seed
- * script (scripts/seed_sherpas.js) and the fallback the domain layer uses when
- * the Supabase `sherpas` table is absent or empty. Once the table is seeded and
+ * Canonical seed for the build3 mentor directory, transcribed from
+ * the "Book Mentor Hours" program page. This is both the input to the seed
+ * script (scripts/seed_mentors.js) and the fallback the domain layer uses when
+ * the Supabase `mentors` table is absent or empty. Once the table is seeded and
  * editable from /admin, the table is the source of truth.
  *
  * Booking links are external (each mentor owns their own calendar). LinkedIn is
@@ -12,7 +12,7 @@
  * URLs; the card simply omits the line when null.
  */
 
-const SHERPAS = [
+const MENTORS = [
   {
     slug: 'varun-chawla',
     name: 'Varun Chawla',
@@ -145,4 +145,4 @@ const SHERPAS = [
   },
 ];
 
-module.exports = { SHERPAS };
+module.exports = { MENTORS };

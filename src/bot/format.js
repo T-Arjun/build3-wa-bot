@@ -4,7 +4,7 @@
  * Render founder records into WhatsApp-friendly text/rows.
  */
 
-const { PREP_DOC_URL, FEEDBACK_FORM_URL } = require('../domain/sherpaAreas');
+const { PREP_DOC_URL, FEEDBACK_FORM_URL } = require('../domain/mentorAreas');
 
 /**
  * Request a higher-resolution variant where the host supports it.
@@ -223,12 +223,12 @@ function truncate(s, n) {
   return (sp > (n - 1) * 0.6 ? cut.slice(0, sp).replace(/[\s,:;.-]+$/, '') : cut) + '…';
 }
 
-// ─── Sherpas (mentor hours) ──────────────────────────────────────────────────
+// ─── Mentors (mentor hours) ──────────────────────────────────────────────────
 
-/** A list row for a single mentor. id encodes the get-sherpa action. */
-function sherpaRow(s) {
+/** A list row for a single mentor. id encodes the get-mentor action. */
+function mentorRow(s) {
   return {
-    id: `sherpa:${s.slug}`,
+    id: `mentor:${s.slug}`,
     title: shortName(s.name),
     description: truncate(s.expertise || '', 72),
   };
@@ -239,7 +239,7 @@ function areaRow(a) {
   return {
     id: `area:${a.key}`,
     title: a.label,
-    description: `${a.count} Sherpa${a.count === 1 ? '' : 's'}`,
+    description: `${a.count} mentor${a.count === 1 ? '' : 's'}`,
   };
 }
 
@@ -257,7 +257,7 @@ function bookingMessage(s) {
 /** Prep-doc + feedback reminder, sent on its own (the "Prep doc" button). */
 function prepMessage() {
   return [
-    'make a copy of the founder talk prep doc, fill it out, and share the editable link with your Sherpa before the call - it makes the session far more useful:',
+    'make a copy of the founder talk prep doc, fill it out, and share the editable link with your mentor before the call - it makes the session far more useful:',
     PREP_DOC_URL,
     '',
     'after the call, take 2 minutes to share feedback 🙏',
@@ -265,8 +265,8 @@ function prepMessage() {
   ].join('\n');
 }
 
-/** Mentor profile card caption for an image card. Omits fields that are absent. */
-function sherpaCard(s) {
+/** mentor profile card caption for an image card. Omits fields that are absent. */
+function mentorCard(s) {
   const lines = [`*${s.name}*`];
   if (s.expertise) lines.push(s.expertise);
   if (s.bio) {
@@ -291,9 +291,9 @@ module.exports = {
   matchCaption,
   focusFields,
   truncate,
-  sherpaRow,
+  mentorRow,
   areaRow,
-  sherpaCard,
+  mentorCard,
   bookingMessage,
   prepMessage,
 };

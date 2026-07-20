@@ -4,7 +4,7 @@
 /**
  * DELIVERY-LAYER audit: the test every prior pass skipped. Instead of checking
  * the engine's output objects, this actually HITS every asset URL the bot would
- * send - founder + sherpa avatars, and sherpa booking links - and verifies each
+ * send - founder + mentor avatars, and mentor booking links - and verifies each
  * is reachable AND a format WhatsApp will render. WhatsApp image messages accept
  * jpeg/png/webp only; it accepts an SVG (200) then silently drops it, so the
  * card never arrives (the "tap -> typing -> dead" bug).
@@ -14,7 +14,7 @@
 require('dotenv').config();
 const { supabase } = require('../src/config/supabase');
 const fmt = require('../src/bot/format');
-const { SHERPAS } = require('../src/domain/sherpas.data');
+const { MENTORS } = require('../src/domain/mentors.data');
 
 const OK_IMAGE = /^image\/(jpeg|jpg|png|webp)/i;
 const CONCURRENCY = 12;
@@ -53,10 +53,10 @@ async function pool(items, fn) {
 
   // 1) Founder avatars (what pushProfile actually sends)
   const avatarTargets = founders.map((f) => ({ who: f.source_slug, url: fmt.avatarFor(f), kind: 'avatar' }));
-  // 2) Sherpa avatars + booking links
-  for (const s of SHERPAS) {
-    avatarTargets.push({ who: `sherpa:${s.slug}`, url: fmt.avatarFor(s), kind: 'avatar' });
-    avatarTargets.push({ who: `sherpa:${s.slug}`, url: s.booking_url, kind: 'booking' });
+  // 2) Mentor avatars + booking links
+  for (const s of MENTORS) {
+    avatarTargets.push({ who: `mentor:${s.slug}`, url: fmt.avatarFor(s), kind: 'avatar' });
+    avatarTargets.push({ who: `mentor:${s.slug}`, url: s.booking_url, kind: 'booking' });
   }
 
   console.log(`checking ${avatarTargets.length} live asset URLs (avatars + booking links)...`);

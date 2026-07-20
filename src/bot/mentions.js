@@ -6,15 +6,15 @@
  * Root problem this solves (observed live, 4th failure of this class in a
  * week): when the user types a name, the model resolves it against flattened
  * history notes and picks the wrong person under name collision - e.g. the
- * user wrote "put in touch with ayushmaan" right after booking Sherpa
+ * user wrote "put in touch with ayushmaan" right after booking Mentor
  * Ayushmaan Kapoor, and the model answered about "Ayush Gupta", an unrelated
  * founder from an earlier list, then invented a LinkedIn claim about him.
  *
  * Fix: person-entity resolution is never the LLM's job. Before each engine
  * turn we scan the raw text against the CANONICAL entities currently in play
- * (all Sherpas + the focus founder + cached matches + last list results) and
+ * (all Mentors + the focus founder + cached matches + last list results) and
  * inject a system note pinning each mentioned name to its real identity and
- * the right contact channel (booking link for a Sherpa, LinkedIn for a
+ * the right contact channel (booking link for a Mentor, LinkedIn for a
  * founder). Exact token equality means "ayushmaan" matches Ayushmaan Kapoor
  * and NOT Ayush Gupta ("ayush" != "ayushmaan").
  *
@@ -77,8 +77,8 @@ function nameTokensOf(c) {
 /**
  * Match user text against candidate entities.
  * @param {string} text - raw user message
- * @param {Array<{name:string, slug:string, type:'sherpa'|'founder', bookingUrl?:string, linkedinUrl?:string}>} candidates
- * @returns matched candidates (deduped by slug, sherpas first)
+ * @param {Array<{name:string, slug:string, type:'mentor'|'founder', bookingUrl?:string, linkedinUrl?:string}>} candidates
+ * @returns matched candidates (deduped by slug, mentors first)
  */
 function findMentions(text, candidates) {
   const seq = tokenize(text);
@@ -112,9 +112,9 @@ function findMentions(text, candidates) {
     seen.add(c.slug);
     hits.push(c);
   }
-  // Sherpas first so a dual founder+Sherpa name (e.g. Varun Chawla) leads with
+  // Mentors first so a dual founder+mentor name (e.g. Varun Chawla) leads with
   // the bookable person when contact language is around.
-  return hits.sort((a, b) => (a.type === b.type ? 0 : a.type === 'sherpa' ? -1 : 1));
+  return hits.sort((a, b) => (a.type === b.type ? 0 : a.type === 'mentor' ? -1 : 1));
 }
 
 /**
@@ -125,8 +125,8 @@ function buildMentionNote(text, candidates) {
   const hits = findMentions(text, candidates);
   if (!hits.length) return null;
   const lines = hits.slice(0, 4).map((c) => {
-    if (c.type === 'sherpa') {
-      return `- "${c.name}" is Sherpa ${c.name} (slug: ${c.slug}). Their booking link IS the direct way to reach them${c.bookingUrl ? `: ${c.bookingUrl}` : ' (get_sherpa shows it)'}. A contact/intro request for them means BOOKING, not LinkedIn.`;
+    if (c.type === 'mentor') {
+      return `- "${c.name}" is community mentor ${c.name} (slug: ${c.slug}). Their booking link IS the direct way to reach them${c.bookingUrl ? `: ${c.bookingUrl}` : ' (get_mentor shows it)'}. A contact/intro request for them means BOOKING, not LinkedIn.`;
     }
     return `- "${c.name}" is community founder ${c.name} (slug: ${c.slug}).${c.linkedinUrl ? ` LinkedIn: ${c.linkedinUrl} - paste this link directly in your reply if they ask for contact.` : ''}`;
   });

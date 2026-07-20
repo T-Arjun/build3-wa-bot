@@ -33,8 +33,8 @@ function persistDraft(conv, state) {
   } else if (state.topic_changed) {
     delete draft.focus;
   }
-  if (state.sherpa_results) draft.sherpa_results = state.sherpa_results;
-  else if (state.topic_changed || state.focus) delete draft.sherpa_results;
+  if (state.mentor_results) draft.mentor_results = state.mentor_results;
+  else if (state.topic_changed || state.focus) delete draft.mentor_results;
   return draft;
 }
 
@@ -79,7 +79,7 @@ function renderOutbox(outbox) {
   for (const turn of turns) {
     if (turn && typeof turn === 'object' && turn.tap) {
       // Accept both a bare slug and the full row id ("profile:<slug>"), like routeReply does.
-      const slug = String(turn.tap).replace(/^(profile|sherpa):/, '');
+      const slug = String(turn.tap).replace(/^(profile|mentor):/, '');
       const f = await founders.getBySlug(slug);
       if (f) {
         conv.draft = { ...conv.draft, focus: fmt.focusFields(f) };

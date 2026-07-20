@@ -42,7 +42,7 @@ test('rate limiter buckets are independent per key', () => {
   assert.strictEqual(isRateLimited('test-ip-d'), false); // untouched key, unaffected
 });
 
-// ─── URL-scheme validation for sherpa links (stored-XSS fix) ───────────────
+// ─── URL-scheme validation for mentor links (stored-XSS fix) ───────────────
 // Real live-confirmed gap: booking_url/linkedin_url/avatar_url were accepted
 // with zero scheme check and rendered later as a raw href/src. A
 // "javascript:alert(document.location)" booking_url was proved to pass

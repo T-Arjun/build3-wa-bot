@@ -4,8 +4,8 @@ const express = require('express');
 const crypto = require('crypto');
 const { supabase } = require('../config/supabase');
 const { env } = require('../config/env');
-const { SHERPAS } = require('../domain/sherpas.data');
-const { AREA_KEYS } = require('../domain/sherpaAreas');
+const { MENTORS } = require('../domain/mentors.data');
+const { AREA_KEYS } = require('../domain/mentorAreas');
 
 const router = express.Router();
 
@@ -163,30 +163,30 @@ router.delete('/api/conversations/:waId', async (req, res) => {
   }
 });
 
-// ─── API: list sherpas (table, falling back to the static seed) ──────────────
-router.get('/api/sherpas', async (_req, res) => {
+// ─── API: list mentors (table, falling back to the static seed) ──────────────
+router.get('/api/mentors', async (_req, res) => {
   try {
     const { data, error } = await supabase()
-      .from('sherpas')
+      .from('mentors')
       .select('*')
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true });
     if (error) throw error;
-    if (data && data.length) return res.json({ source: 'table', sherpas: data });
+    if (data && data.length) return res.json({ source: 'table', mentors: data });
   } catch (_e) {
     // table missing / empty → serve the static seed read-only
   }
-  res.json({ source: 'seed', sherpas: SHERPAS.map((s) => ({ ...s, is_active: s.is_active !== false })) });
+  res.json({ source: 'seed', mentors: MENTORS.map((s) => ({ ...s, is_active: s.is_active !== false })) });
 });
 
-// ─── API: upsert a sherpa (by slug) ──────────────────────────────────────────
-router.post('/api/sherpas', async (req, res) => {
+// ─── API: upsert a mentor (by slug) ──────────────────────────────────────────
+router.post('/api/mentors', async (req, res) => {
   const b = req.body || {};
   if (!b.slug || !b.name || !b.booking_url) {
     return res.status(400).json({ error: 'slug, name, and booking_url are required' });
   }
   // Every one of these gets rendered later as a raw href/src (dashboardHtml's
-  // renderBubble, sherpasHtml's table) - with NO scheme check, a `javascript:`
+  // renderBubble, mentorsHtml's table) - with NO scheme check, a `javascript:`
   // URL saved here becomes a stored XSS that fires in whichever admin session
   // clicks it (proved live: a booking_url of "javascript:alert(document.
   // location)" was accepted and would have rendered as <a href="javascript:
@@ -214,7 +214,7 @@ router.post('/api/sherpas', async (req, res) => {
     sort_order: Number.isInteger(b.sort_order) ? b.sort_order : 100,
   };
   try {
-    const { error } = await supabase().from('sherpas').upsert(row, { onConflict: 'slug' });
+    const { error } = await supabase().from('mentors').upsert(row, { onConflict: 'slug' });
     if (error) throw error;
     res.json({ ok: true });
   } catch (e) {
@@ -222,11 +222,11 @@ router.post('/api/sherpas', async (req, res) => {
   }
 });
 
-// ─── API: deactivate a sherpa (soft delete) ──────────────────────────────────
-router.delete('/api/sherpas/:slug', async (req, res) => {
+// ─── API: deactivate a mentor (soft delete) ──────────────────────────────────
+router.delete('/api/mentors/:slug', async (req, res) => {
   try {
     const { error } = await supabase()
-      .from('sherpas')
+      .from('mentors')
       .update({ is_active: false })
       .eq('slug', req.params.slug);
     if (error) throw error;
@@ -241,8 +241,8 @@ router.get('/', (req, res) => {
   res.send(dashboardHtml(req.query.token));
 });
 
-router.get('/sherpas', (req, res) => {
-  res.send(sherpasHtml(req.query.token));
+router.get('/mentors', (req, res) => {
+  res.send(mentorsHtml(req.query.token));
 });
 
 // Test hooks attached to the router function itself (Express routers ARE
@@ -350,7 +350,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0
 .bubble .ts .tick{margin-left:3px}
 .bubble .fail-tag{display:inline-block;margin-top:4px;background:#3a1414;color:#f87171;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px}
 
-/* Rich content: image card (avatar/profile), list message (areas/founders/sherpas),
+/* Rich content: image card (avatar/profile), list message (areas/founders/mentors),
    quick-reply buttons, and CTA link - matching how each actually renders on WhatsApp. */
 .bubble img.media{display:block;width:100%;max-width:260px;border-radius:6px 6px 2px 2px;margin-bottom:6px;background:#0e0e0e}
 .bubble .caption{white-space:pre-wrap}
@@ -380,7 +380,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0
   <div class="badge">BOT ADMIN</div>
   <div class="header-right">
     <span class="refresh-info" id="lastRefresh"></span>
-    <a class="btn" href="/admin/sherpas${qs}">Sherpas</a>
+    <a class="btn" href="/admin/mentors${qs}">Mentors</a>
     <button class="btn" onclick="tick()">↻ Refresh</button>
     <div class="live" title="Auto-refreshes every 5s"></div>
   </div>
@@ -664,7 +664,7 @@ setInterval(tick, 5000);
 </html>`;
 }
 
-function sherpasHtml(token) {
+function mentorsHtml(token) {
   const qs = token ? `?token=${encodeURIComponent(token)}` : '';
   const areaKeys = JSON.stringify(AREA_KEYS);
   return `<!DOCTYPE html>
@@ -672,7 +672,7 @@ function sherpasHtml(token) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>build3 - sherpas</title>
+<title>build3 - mentors</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0e0e0;min-height:100vh}
@@ -710,11 +710,11 @@ tr.inactive{opacity:.45}
 </head>
 <body>
 <div class="header">
-  <div class="logo">build3 <span>sherpas</span></div>
-  <div class="badge">SHERPA HOURS</div>
+  <div class="logo">build3 <span>mentors</span></div>
+  <div class="badge">MENTOR HOURS</div>
   <div class="right">
     <a class="btn" href="/admin${qs}">← Monitor</a>
-    <button class="btn primary" onclick="openAdd()">+ Add sherpa</button>
+    <button class="btn primary" onclick="openAdd()">+ Add mentor</button>
   </div>
 </div>
 <div class="wrap">
@@ -727,7 +727,7 @@ tr.inactive{opacity:.45}
 
 <div class="modal-bg" id="modalBg">
   <div class="modal">
-    <h2 id="modalTitle">Add sherpa</h2>
+    <h2 id="modalTitle">Add mentor</h2>
     <div class="field"><label>Name</label><input id="f_name"></div>
     <div class="field"><label>Slug (stable id, lowercase-with-dashes)</label><input id="f_slug" placeholder="varun-chawla"></div>
     <div class="field"><label>Expertise (shown on the card)</label><textarea id="f_expertise" rows="2"></textarea></div>
@@ -752,10 +752,10 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 function banner(msg, ok){const b=document.getElementById('banner');b.textContent=msg;b.style.display='block';b.style.color=ok?'#7ee0a0':'#e8c97a';b.style.borderColor=ok?'#1a4a2a':'#4a3a1a';b.style.background=ok?'#0a1a10':'#1a160a';}
 
 async function load(){
-  const r = await fetch('/admin/api/sherpas'+QS);
+  const r = await fetch('/admin/api/mentors'+QS);
   const data = await r.json();
-  if(data.source==='seed') banner('Showing the built-in seed (the sherpas table isn\\'t created yet). Edits won\\'t persist until the 0004 migration is applied.', false);
-  const rows = data.sherpas||[];
+  if(data.source==='seed') banner('Showing the built-in seed (the mentors table isn\\'t created yet). Edits won\\'t persist until the 0004 migration is applied.', false);
+  const rows = data.mentors||[];
   document.getElementById('rows').innerHTML = rows.map(s=>\`
     <tr class="\${s.is_active===false?'inactive':''}">
       <td><div class="name">\${esc(s.name)}</div><div class="muted">\${esc(s.slug)}</div></td>
@@ -766,7 +766,7 @@ async function load(){
         <button class="btn" onclick='edit(\${esc(JSON.stringify(JSON.stringify(s)))})'>Edit</button>
         \${s.is_active===false?'':'<button class="btn danger" onclick="deactivate(\\''+esc(s.slug)+'\\')">Off</button>'}
       </td>
-    </tr>\`).join('') || '<tr><td colspan="5" class="muted">no sherpas.</td></tr>';
+    </tr>\`).join('') || '<tr><td colspan="5" class="muted">no mentors.</td></tr>';
 }
 
 function renderAreaChecks(selected){
@@ -776,7 +776,7 @@ function renderAreaChecks(selected){
 }
 function openAdd(){
   editing=null;
-  document.getElementById('modalTitle').textContent='Add sherpa';
+  document.getElementById('modalTitle').textContent='Add mentor';
   for(const id of ['name','slug','expertise','booking','linkedin','avatar']) document.getElementById('f_'+id).value='';
   document.getElementById('f_sort').value=100;
   document.getElementById('f_slug').disabled=false;
@@ -812,14 +812,14 @@ async function save(){
     sort_order:parseInt(document.getElementById('f_sort').value,10)||100,
   };
   if(!body.slug||!body.name||!body.booking_url){banner('slug, name and booking URL are required',false);return;}
-  const r=await fetch('/admin/api/sherpas'+QS,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const r=await fetch('/admin/api/mentors'+QS,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const j=await r.json();
   if(j.ok){closeModal();banner('Saved '+body.name,true);load();}
   else banner('Save failed: '+(j.error||'unknown'),false);
 }
 async function deactivate(slug){
   if(!confirm('Deactivate '+slug+'? It will stop appearing in the bot.'))return;
-  const r=await fetch('/admin/api/sherpas/'+encodeURIComponent(slug)+QS,{method:'DELETE'});
+  const r=await fetch('/admin/api/mentors/'+encodeURIComponent(slug)+QS,{method:'DELETE'});
   const j=await r.json();
   if(j.ok){banner('Deactivated '+slug,true);load();}
   else banner('Failed: '+(j.error||'unknown'),false);

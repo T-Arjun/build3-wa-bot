@@ -181,8 +181,8 @@ function summarize(finalText, outbox) {
     if (m.kind === 'list') {
       const ids = (m.rows || []).map((r) => r.id || '');
       const titles = (m.rows || []).map((r) => r.title).slice(0, 8).join(', ');
-      if (ids.some((id) => id.startsWith('area:'))) shown.push(`a list of Sherpa areas: ${titles}`);
-      else if (ids.some((id) => id.startsWith('sherpa:'))) shown.push(`a list of Sherpas: ${titles}`);
+      if (ids.some((id) => id.startsWith('area:'))) shown.push(`a list of mentor areas: ${titles}`);
+      else if (ids.some((id) => id.startsWith('mentor:'))) shown.push(`a list of mentors: ${titles}`);
       else shown.push(`a list of founders: ${titles}`);
     } else if (m.kind === 'image') {
       shown.push(`the profile of ${String(m.caption || '').split('\n')[0].replace(/\*/g, '').trim()}`);

@@ -6,9 +6,9 @@ const { findMentions, buildMentionNote } = require('../src/bot/mentions');
 const { selfHarmResponse } = require('../src/bot/guards');
 
 // The real production failure this module exists to prevent: user wrote
-// "ayushmaan" right after booking Sherpa Ayushmaan Kapoor, and the model
+// "ayushmaan" right after booking mentor Ayushmaan Kapoor, and the model
 // answered about "Ayush Gupta", an unrelated founder from an earlier list.
-const AYUSHMAAN = { name: 'Ayushmaan Kapoor', slug: 'ayushmaan-kapoor', type: 'sherpa', bookingUrl: 'https://cal.example/ak' };
+const AYUSHMAAN = { name: 'Ayushmaan Kapoor', slug: 'ayushmaan-kapoor', type: 'mentor', bookingUrl: 'https://cal.example/ak' };
 const AYUSH = { name: 'Ayush Gupta', slug: 'ayush-gupta', type: 'founder' };
 const PRANAV = { name: 'Pranav Khanna', slug: 'pranav-khanna', type: 'founder', linkedinUrl: 'https://linkedin.com/in/khannapranav' };
 
@@ -21,7 +21,7 @@ test('the live failure: "ayushmaan" resolves to Ayushmaan Kapoor, never Ayush Gu
   assert.strictEqual(hits[0].slug, 'ayushmaan-kapoor');
 });
 
-test('"ayush" alone resolves to Ayush Gupta, not the Sherpa', () => {
+test('"ayush" alone resolves to Ayush Gupta, not the mentor', () => {
   const hits = findMentions('show me ayush', [AYUSH, AYUSHMAAN]);
   assert.strictEqual(hits.length, 1);
   assert.strictEqual(hits[0].slug, 'ayush-gupta');
@@ -61,18 +61,18 @@ test('ordinary conversational closers after a bare first name do NOT veto the ma
   assert.strictEqual(findMentions('call pranav malhotra', [PRANAV]).length, 0);
 });
 
-test('dual founder+sherpa name returns both, sherpa first', () => {
+test('dual founder+mentor name returns both, mentor first', () => {
   const V_F = { name: 'Varun Chawla', slug: 'varun-chawla-f', type: 'founder' };
-  const V_S = { name: 'Varun Chawla', slug: 'varun-chawla', type: 'sherpa', bookingUrl: 'x' };
+  const V_S = { name: 'Varun Chawla', slug: 'varun-chawla', type: 'mentor', bookingUrl: 'x' };
   const hits = findMentions('book varun chawla', [V_F, V_S]);
   assert.strictEqual(hits.length, 2);
-  assert.strictEqual(hits[0].type, 'sherpa');
+  assert.strictEqual(hits[0].type, 'mentor');
 });
 
 test('no names -> no note; note text carries the right channel per type', () => {
   assert.strictEqual(buildMentionNote('find me fintech founders in pune', [AYUSHMAAN, PRANAV]), null);
   const note = buildMentionNote('put me in touch with ayushmaan and pranav', [AYUSHMAAN, PRANAV]);
-  assert.match(note, /Sherpa Ayushmaan Kapoor/);
+  assert.match(note, /mentor Ayushmaan Kapoor/);
   assert.match(note, /booking link/i);
   assert.match(note, /https:\/\/cal\.example\/ak/);
   assert.match(note, /Pranav Khanna/);

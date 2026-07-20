@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Mentor ("Sherpa") expertise taxonomy and the two program guardrail links.
+ * Mentor expertise taxonomy and the two program guardrail links.
  * Single source of truth, shared by the domain layer, the bot tools, the system
  * prompt, and the admin dashboard. Area keys are stable ids used inside reply
  * ids (area:<key>); labels are what the founder sees in the picker.
