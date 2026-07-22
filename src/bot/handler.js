@@ -28,8 +28,10 @@ const MATCH_PAGE = 3;
  */
 async function sendText(to, body) {
   let ok = true;
+  let wamid = null;
   try {
-    await wa.sendText(to, body);
+    const res = await wa.sendText(to, body);
+    wamid = res?.messages?.[0]?.id || null;
   } catch (err) {
     ok = false;
     throw err;
@@ -37,7 +39,7 @@ async function sendText(to, body) {
     // Log on failure too - a send that never reached WhatsApp still needs a
     // row (tagged ok=false) so the admin dashboard can show it as failed
     // instead of silently having no record at all.
-    await messageLog.logOutbound(to, { kind: 'text', body }, ok);
+    await messageLog.logOutbound(to, { kind: 'text', body }, ok, wamid);
   }
 }
 
@@ -49,7 +51,7 @@ async function sendOutbox(to, outbox) {
   // let a later spec's row land (and get an earlier created_at/id) before an
   // earlier spec's row, scrambling the admin dashboard's rendered order.
   for (let i = 0; i < outbox.length; i++) {
-    await messageLog.logOutbound(to, outbox[i], results[i]?.ok !== false);
+    await messageLog.logOutbound(to, outbox[i], results[i]?.ok !== false, results[i]?.wamid);
   }
   return results;
 }

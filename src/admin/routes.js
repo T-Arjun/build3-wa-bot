@@ -238,6 +238,30 @@ router.delete('/api/mentors/:slug', async (req, res) => {
   }
 });
 
+// ─── API: list approved WhatsApp templates straight from Meta ─────────────────
+// This is the "does the app actually know about Meta" piece: rather than
+// requiring an exact template name typed blind (and hoping it matches what's
+// really approved on the WABA), the dashboard fetches the real list so the
+// send-template control can offer a dropdown of what's actually usable.
+router.get('/api/templates', async (_req, res) => {
+  if (!env.whatsapp.businessAccountId) {
+    return res.status(503).json({ error: 'WHATSAPP_BUSINESS_ACCOUNT_ID not configured' });
+  }
+  try {
+    const url = `https://graph.facebook.com/${env.whatsapp.graphVersion}/${env.whatsapp.businessAccountId}/message_templates?fields=name,status,category,language,components`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${env.whatsapp.token}` } });
+    const j = await r.json();
+    if (!r.ok) return res.status(502).json({ error: j.error?.message || 'Meta API error' });
+    const templates = (j.data || []).map((t) => {
+      const body = (t.components || []).find((c) => c.type === 'BODY');
+      return { name: t.name, status: t.status, category: t.category, language: t.language, bodyPreview: body?.text || '' };
+    });
+    res.json({ templates });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // ─── API: send a business-initiated template message ─────────────────────────
 // The ONLY way to reach a number that hasn't messaged in within the last 24h
 // (see cloudApi.sendTemplate). This is the single logged path for that - it
@@ -257,8 +281,10 @@ router.post('/api/send-template', async (req, res) => {
 
   let result;
   let ok = true;
+  let wamid = null;
   try {
     result = await wa.sendTemplate(waId, name, languageCode, components);
+    wamid = result?.messages?.[0]?.id || null;
   } catch (e) {
     ok = false;
     result = { error: e.message };
@@ -270,6 +296,7 @@ router.post('/api/send-template', async (req, res) => {
     waId,
     { kind: 'template', name, languageCode, components, bodyPreview: b.bodyPreview || null },
     ok,
+    wamid,
   );
 
   // Make the number appear in the sidebar immediately, even before any reply -
@@ -404,7 +431,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#edede
 .msg.user .bubble{background:#fff;color:#111b21;border-top-left-radius:0}
 .msg.bot .bubble{background:#d9fdd3;color:#111b21;border-top-right-radius:0}
 .bubble .ts{display:block;text-align:right;font-size:10.5px;color:#667781;margin-top:2px;user-select:none}
-.bubble .ts .tick{margin-left:3px;color:#53bdeb}
+.bubble .ts .tick{margin-left:3px;color:#667781}
+.bubble .ts .tick.read{color:#53bdeb}
 .bubble .fail-tag{display:inline-block;margin-top:4px;background:#fdecea;color:#c0392b;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px}
 
 /* Rich content: image card (avatar/profile), list message (areas/founders/mentors),
@@ -483,15 +511,14 @@ body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#edede
     <h3>Send a template message</h3>
     <label>WhatsApp number (with country code)</label>
     <input type="text" id="tplWaId" placeholder="e.g. 919876543210">
-    <label>Template name</label>
-    <input type="text" id="tplName" placeholder="e.g. build3_updates_optin">
-    <label>Language code</label>
-    <input type="text" id="tplLang" value="en">
+    <label>Template</label>
+    <select id="tplName" onchange="onTplPick()"><option value="">Loading templates from Meta…</option></select>
+    <div class="modal-note" id="tplPreview" style="display:none"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeTemplateModal()">Cancel</button>
       <button class="btn" style="color:#fff;background:#008069;border-color:#008069" onclick="sendTemplate()">Send</button>
     </div>
-    <div class="modal-note">Only works for an APPROVED template on this WABA - the only way to message a number outside the 24h window. No body-variable support yet; use a variable-free template.</div>
+    <div class="modal-note">Only APPROVED templates on this WABA can be sent - the only way to message a number outside the 24h window. No body-variable support yet; use a variable-free template.</div>
   </div>
 </div>
 
@@ -623,11 +650,21 @@ function dayOf(iso) {
 }
 
 /** Render one message_log row as a WhatsApp-accurate bubble - text/image/list/buttons/cta. */
+// Real per-message delivery/read status from Meta's status webhook (m.status),
+// not a hardcoded "always shows a tick" placeholder - null/undefined means the
+// row predates this feature or Meta hasn't sent a status callback yet.
+function tickHtml(m) {
+  if (!m.status || m.status === 'failed') return '<span class="tick">✓</span>';
+  if (m.status === 'read') return '<span class="tick read">✓✓</span>';
+  if (m.status === 'delivered') return '<span class="tick">✓✓</span>';
+  return '<span class="tick">✓</span>'; // sent
+}
+
 function renderBubble(m) {
   const isOut = m.direction === 'out';
   const cls = isOut ? 'bot' : 'user';
   const p = m.payload || {};
-  const ts = \`<span class="ts">\${timeOf(m.created_at)}\${isOut ? '<span class="tick">✓</span>' : ''}</span>\`;
+  const ts = \`<span class="ts">\${timeOf(m.created_at)}\${isOut ? tickHtml(m) : ''}</span>\`;
   const failTag = isOut && m.ok === false ? '<span class="fail-tag">⚠ failed to send</span><br>' : '';
 
   let inner;
@@ -756,9 +793,36 @@ async function tick() {
   if (selected) await loadThread(selected);
 }
 
-function openTemplateModal() {
+let tplList = [];
+
+async function openTemplateModal() {
   document.getElementById('tplWaId').value = selected || '';
   document.getElementById('tplModal').style.display = 'flex';
+  const sel = document.getElementById('tplName');
+  sel.innerHTML = '<option value="">Loading templates from Meta…</option>';
+  document.getElementById('tplPreview').style.display = 'none';
+  try {
+    const r = await fetch(API + '/templates' + QS);
+    const body = await r.json();
+    if (!r.ok) { sel.innerHTML = '<option value="">' + esc(body.error || 'Failed to load templates') + '</option>'; return; }
+    tplList = body.templates || [];
+    const usable = tplList.filter(t => t.status === 'APPROVED');
+    if (!usable.length) { sel.innerHTML = '<option value="">No APPROVED templates on this WABA</option>'; return; }
+    sel.innerHTML = '<option value="">Select a template…</option>' + usable.map(t =>
+      \`<option value="\${esc(t.name)}">\${esc(t.name)} (\${esc(t.language)})</option>\`
+    ).join('');
+  } catch (e) {
+    sel.innerHTML = '<option value="">Failed to reach Meta</option>';
+  }
+}
+
+function onTplPick() {
+  const name = document.getElementById('tplName').value;
+  const t = tplList.find(x => x.name === name);
+  const prev = document.getElementById('tplPreview');
+  if (!t) { prev.style.display = 'none'; return; }
+  prev.style.display = 'block';
+  prev.innerHTML = '<strong style="color:#111b21">' + esc(t.category || '') + '</strong> · ' + esc(t.bodyPreview || '(no body text)');
 }
 
 function closeTemplateModal() {
@@ -768,12 +832,14 @@ function closeTemplateModal() {
 async function sendTemplate() {
   const waId = document.getElementById('tplWaId').value.trim();
   const name = document.getElementById('tplName').value.trim();
-  const languageCode = document.getElementById('tplLang').value.trim() || 'en';
-  if (!waId || !name) { showToast('Number and template name are required'); return; }
+  if (!waId || !name) { showToast('Number and template are required'); return; }
+  const t = tplList.find(x => x.name === name);
+  const languageCode = t?.language || 'en';
+  const bodyPreview = t?.bodyPreview || null;
   const r = await fetch(API + '/send-template' + QS, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ waId, name, languageCode }),
+    body: JSON.stringify({ waId, name, languageCode, bodyPreview }),
   });
   const body = await r.json().catch(() => ({}));
   if (!r.ok) { showToast('Send failed: ' + (body.error || r.status)); return; }

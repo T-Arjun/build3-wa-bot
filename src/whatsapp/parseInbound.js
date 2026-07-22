@@ -61,4 +61,26 @@ function parseInbound(body) {
   return events;
 }
 
-module.exports = { parseInbound };
+/**
+ * Extract delivery/read/failed status callbacks from a webhook payload.
+ * Each event: { wamid, status } - status ∈ sent | delivered | read | failed.
+ * These arrive on the SAME /webhook payload as inbound messages, just under
+ * value.statuses instead of value.messages, keyed by the wamid Meta returned
+ * from the original send.
+ */
+function parseStatuses(body) {
+  const events = [];
+  const entries = body?.entry || [];
+  for (const entry of entries) {
+    for (const change of entry.changes || []) {
+      const value = change.value || {};
+      for (const s of value.statuses || []) {
+        if (!s.id || !s.status) continue;
+        events.push({ wamid: s.id, status: s.status });
+      }
+    }
+  }
+  return events;
+}
+
+module.exports = { parseInbound, parseStatuses };

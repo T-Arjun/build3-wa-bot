@@ -14,11 +14,11 @@ const log = require('../lib/logger');
  * never block the actual WhatsApp conversation.
  */
 
-async function append(waId, direction, kind, payload, ok = true) {
+async function append(waId, direction, kind, payload, ok = true, wamid = null) {
   try {
     const { error } = await supabase()
       .from('message_log')
-      .insert({ wa_id: waId, direction, kind, payload: payload || {}, ok });
+      .insert({ wa_id: waId, direction, kind, payload: payload || {}, ok, wamid: wamid || null });
     if (error) throw error;
   } catch (e) {
     log.warn(`messageLog.append failed (wa=${waId}, ${direction}/${kind}): ${e.message}`);
@@ -44,8 +44,37 @@ function logInbound(waId, ev) {
 }
 
 /** One outbound send attempt, tagged with whether it actually reached the user. */
-function logOutbound(waId, spec, ok) {
-  return append(waId, 'out', spec.kind, spec, ok);
+function logOutbound(waId, spec, ok, wamid) {
+  return append(waId, 'out', spec.kind, spec, ok, wamid);
+}
+
+const STATUS_RANK = { sent: 1, delivered: 2, read: 3, failed: 4 };
+
+/**
+ * Apply a delivery/read status callback from Meta's "statuses" webhook to the
+ * message_log row it belongs to (matched by wamid, the id Meta returned from
+ * the original send). Statuses can arrive out of order or be redelivered, so
+ * this only ever moves forward (sent -> delivered -> read), never backward -
+ * a late "sent" retry must not stomp an already-recorded "read".
+ */
+async function updateStatusByWamid(wamid, status) {
+  if (!wamid || !status) return;
+  try {
+    const { data, error } = await supabase()
+      .from('message_log')
+      .select('id, status')
+      .eq('wamid', wamid)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return; // status for a message we don't have a row for (e.g. pre-migration) - nothing to update
+    const prevRank = STATUS_RANK[data.status] || 0;
+    const nextRank = STATUS_RANK[status] || 0;
+    if (nextRank < prevRank) return;
+    const { error: updErr } = await supabase().from('message_log').update({ status }).eq('id', data.id);
+    if (updErr) throw updErr;
+  } catch (e) {
+    log.warn(`messageLog.updateStatusByWamid failed (wamid=${wamid}, status=${status}): ${e.message}`);
+  }
 }
 
 async function listForWaId(waId, limit = 500) {
@@ -59,4 +88,4 @@ async function listForWaId(waId, limit = 500) {
   return data || [];
 }
 
-module.exports = { logInbound, logOutbound, listForWaId };
+module.exports = { logInbound, logOutbound, listForWaId, updateStatusByWamid };

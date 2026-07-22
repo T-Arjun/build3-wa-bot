@@ -32,6 +32,7 @@ const env = {
     appSecret: process.env.WHATSAPP_APP_SECRET || '',
     token: process.env.WHATSAPP_TOKEN || '',
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
+    businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '',
     graphVersion: process.env.WHATSAPP_GRAPH_VERSION || 'v21.0',
     // Escape hatch: allow unsigned webhooks even without an app secret. Intended
     // for local/dev only - in production the webhook fails closed without this.

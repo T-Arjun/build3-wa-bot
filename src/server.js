@@ -3,11 +3,12 @@
 const express = require('express');
 const { env, checkConfig } = require('./config/env');
 const { verifySignature } = require('./whatsapp/verifySignature');
-const { parseInbound } = require('./whatsapp/parseInbound');
+const { parseInbound, parseStatuses } = require('./whatsapp/parseInbound');
 const { alreadyProcessed } = require('./bot/idempotency');
 const { handleEvent } = require('./bot/handler');
 const { startSyncSchedule } = require('./sync/schedule');
 const adminRouter = require('./admin/routes');
+const messageLog = require('./domain/messageLog');
 const log = require('./lib/logger');
 
 const app = express();
@@ -63,6 +64,21 @@ app.post('/webhook', (req, res) => {
   for (const ev of events) {
     if (alreadyProcessed(ev.messageId)) continue;
     handleEvent(ev).catch((err) => log.error('handleEvent rejected:', err.message));
+  }
+
+  // Delivery/read status callbacks - independent of the message flow above,
+  // so a parsing issue here can never affect actual conversation handling.
+  let statuses = [];
+  try {
+    statuses = parseStatuses(req.body);
+  } catch (err) {
+    log.error('parseStatuses failed:', err.message);
+    return;
+  }
+  for (const s of statuses) {
+    messageLog
+      .updateStatusByWamid(s.wamid, s.status)
+      .catch((err) => log.error('updateStatusByWamid rejected:', err.message));
   }
 });
 
