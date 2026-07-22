@@ -341,90 +341,107 @@ function dashboardHtml(token) {
 <title>build3 - bot monitor</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0e0e0;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#ededed;color:#111b21;height:100vh;display:flex;flex-direction:column;overflow:hidden}
 
-.header{background:#111;border-bottom:1px solid #1e1e1e;padding:10px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0}
-.logo{font-size:15px;font-weight:700;color:#fff;letter-spacing:-.3px}
-.logo span{color:#6366f1}
-.badge{background:#1e1e2e;border:1px solid #2d2d4a;border-radius:6px;color:#a5b4fc;font-size:11px;font-weight:600;padding:2px 8px;letter-spacing:.3px}
+/* Real WhatsApp Web light theme: off-white app chrome, teal-green accent,
+   white sidebar/panels, tan chat wallpaper, white/light-green bubbles. */
+.header{background:#f0f2f5;border-bottom:1px solid #d1d7db;padding:10px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.logo{font-size:15px;font-weight:700;color:#111b21;letter-spacing:-.3px}
+.logo span{color:#008069}
+.badge{background:#e9edef;border:1px solid #d1d7db;border-radius:6px;color:#54656f;font-size:11px;font-weight:600;padding:2px 8px;letter-spacing:.3px}
 .header-right{display:flex;align-items:center;gap:10px;margin-left:auto}
-.refresh-info{color:#555;font-size:11px}
-.btn{background:#1e1e2e;border:1px solid #2d2d4a;border-radius:7px;color:#a5b4fc;cursor:pointer;font-size:12px;font-weight:600;padding:5px 12px;transition:.15s;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center}
-.btn:hover{background:#252540;border-color:#4f46e5}
-.btn.danger{background:#1e1010;border-color:#4a1a1a;color:#f87171}
-.btn.danger:hover{background:#2a1010;border-color:#ef4444}
-.live{width:7px;height:7px;border-radius:50%;background:#22c55e;animation:pulse 2s infinite}
+.refresh-info{color:#667781;font-size:11px}
+.btn{background:#fff;border:1px solid #d1d7db;border-radius:7px;color:#008069;cursor:pointer;font-size:12px;font-weight:600;padding:5px 12px;transition:.15s;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center}
+.btn:hover{background:#f0f2f5;border-color:#008069}
+.btn.danger{background:#fff;border-color:#f0d4d4;color:#e03131}
+.btn.danger:hover{background:#fdecea;border-color:#e03131}
+.live{width:7px;height:7px;border-radius:50%;background:#25d366;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
 .body{display:flex;flex:1;overflow:hidden}
 
-.sidebar{width:300px;flex-shrink:0;border-right:1px solid #1e1e1e;display:flex;flex-direction:column;overflow:hidden}
-.search-wrap{padding:10px 12px;border-bottom:1px solid #1e1e1e}
-.search-wrap input{width:100%;background:#141414;border:1px solid #252525;border-radius:7px;color:#e0e0e0;font-size:12px;padding:7px 10px;outline:none}
-.search-wrap input:focus{border-color:#4f46e5}
-.sidebar-header{padding:10px 14px;border-bottom:1px solid #1e1e1e;font-size:11px;font-weight:600;color:#555;letter-spacing:.6px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
-.conv-count{color:#6366f1;font-size:11px;font-weight:700}
+.sidebar{width:300px;flex-shrink:0;border-right:1px solid #d1d7db;display:flex;flex-direction:column;overflow:hidden;background:#fff}
+.search-wrap{padding:10px 12px;border-bottom:1px solid #e9edef}
+.search-wrap input{width:100%;background:#f0f2f5;border:1px solid transparent;border-radius:20px;color:#111b21;font-size:12px;padding:7px 14px;outline:none}
+.search-wrap input:focus{border-color:#008069}
+.sidebar-header{padding:10px 14px;border-bottom:1px solid #e9edef;font-size:11px;font-weight:600;color:#667781;letter-spacing:.6px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
+.conv-count{color:#008069;font-size:11px;font-weight:700}
 .conv-list{overflow-y:auto;flex:1}
-.conv-item{padding:11px 14px;border-bottom:1px solid #141414;cursor:pointer;transition:.12s;position:relative}
-.conv-item:hover{background:#141414}
-.conv-item.active{background:#1a1a2e;border-left:3px solid #6366f1}
-.conv-num{font-size:12px;font-weight:600;color:#e0e0e0;font-family:monospace;letter-spacing:.3px}
-.conv-name{font-size:11px;color:#6366f1;margin-top:1px;font-weight:600}
-.conv-time{font-size:10px;color:#555;margin-top:2px}
-.conv-preview{font-size:11px;color:#555;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
-.msg-count{position:absolute;right:12px;top:12px;background:#1e1e2e;color:#a5b4fc;font-size:10px;font-weight:600;padding:2px 6px;border-radius:10px}
-.no-results{padding:20px;color:#333;font-size:12px;text-align:center}
+.conv-item{padding:11px 14px 11px 58px;border-bottom:1px solid #f2f2f2;cursor:pointer;transition:.12s;position:relative;min-height:36px}
+.conv-item:hover{background:#f5f6f6}
+.conv-item.active{background:#f0f2f5}
+.conv-avatar{position:absolute;left:14px;top:11px;width:36px;height:36px;border-radius:50%;overflow:hidden;background:#dfe5e7;flex-shrink:0}
+.conv-avatar svg{width:100%;height:100%;display:block}
+.conv-num{font-size:12.5px;font-weight:600;color:#111b21;letter-spacing:.2px}
+.conv-name{font-size:11px;color:#008069;margin-top:1px;font-weight:600}
+.conv-time{font-size:10px;color:#667781;margin-top:2px}
+.conv-preview{font-size:11px;color:#667781;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px}
+.msg-count{position:absolute;right:12px;bottom:11px;background:#25d366;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;min-width:16px;text-align:center}
+.no-results{padding:20px;color:#8696a0;font-size:12px;text-align:center}
 
 .thread{flex:1;display:flex;flex-direction:column;overflow:hidden}
-.thread-header{padding:12px 20px;border-bottom:1px solid #1e1e1e;display:flex;align-items:center;gap:10px;background:#111}
+.thread-header{padding:10px 20px;border-bottom:1px solid #d1d7db;display:flex;align-items:center;gap:12px;background:#f0f2f5}
+.thread-avatar{width:38px;height:38px;border-radius:50%;overflow:hidden;background:#dfe5e7;flex-shrink:0}
+.thread-avatar svg{width:100%;height:100%;display:block}
 .thread-info{flex:1}
-.thread-num{font-size:14px;font-weight:600;font-family:monospace;color:#e0e0e0}
-.thread-meta{font-size:11px;color:#555;margin-top:2px}
+.thread-num{font-size:14px;font-weight:600;color:#111b21}
+.thread-meta{font-size:11.5px;color:#667781;margin-top:2px}
 
-/* WhatsApp-accurate chat surface: dark wallpaper + doodle texture, like the
-   real WhatsApp Business app dark theme, so this reads as "the actual chat"
-   rather than a generic log viewer. */
+/* WhatsApp-accurate chat surface: light tan wallpaper + subtle doodle texture,
+   matching the real WhatsApp Web/desktop LIGHT theme (the one people actually
+   use day to day), not a generic dark log viewer. */
 .thread-body{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:2px;
-  background-color:#0b141a;
-  background-image:radial-gradient(circle at 8px 8px,rgba(255,255,255,.025) 1.4px,transparent 1.5px);
+  background-color:#efeae2;
+  background-image:radial-gradient(circle at 8px 8px,rgba(0,0,0,.035) 1.4px,transparent 1.5px);
   background-size:32px 32px;}
-.empty{color:#3b4a54;font-size:13px;text-align:center;margin-top:80px;line-height:2}
-.day-sep{align-self:center;background:#182229;color:#8696a0;font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px;margin:12px 0 8px;text-transform:uppercase;letter-spacing:.3px}
+.empty{color:#8696a0;font-size:13px;text-align:center;margin-top:80px;line-height:2}
+.day-sep{align-self:center;background:#e1f2fb;color:#54656f;font-size:11.5px;font-weight:600;padding:5px 12px;border-radius:7px;margin:12px 0 8px;box-shadow:0 1px 1px rgba(0,0,0,.08)}
 
 .msg{max-width:65%;display:flex;flex-direction:column;margin-bottom:3px}
 .msg.user{align-self:flex-start}
 .msg.bot{align-self:flex-end}
-.bubble{position:relative;padding:6px 9px 8px;border-radius:8px;font-size:13.5px;line-height:1.4;word-break:break-word;white-space:pre-wrap;box-shadow:0 1px 1px rgba(0,0,0,.3)}
-.msg.user .bubble{background:#202c33;color:#e9edef;border-top-left-radius:0}
-.msg.bot .bubble{background:#005c4b;color:#e9edef;border-top-right-radius:0}
-.bubble .ts{display:block;text-align:right;font-size:10.5px;color:#8696a0;margin-top:2px;user-select:none}
-.msg.bot .bubble .ts{color:#8fd6c4}
-.bubble .ts .tick{margin-left:3px}
-.bubble .fail-tag{display:inline-block;margin-top:4px;background:#3a1414;color:#f87171;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px}
+.bubble{position:relative;padding:6px 9px 8px;border-radius:8px;font-size:13.5px;line-height:1.4;word-break:break-word;white-space:pre-wrap;box-shadow:0 1px .5px rgba(0,0,0,.13)}
+.msg.user .bubble{background:#fff;color:#111b21;border-top-left-radius:0}
+.msg.bot .bubble{background:#d9fdd3;color:#111b21;border-top-right-radius:0}
+.bubble .ts{display:block;text-align:right;font-size:10.5px;color:#667781;margin-top:2px;user-select:none}
+.bubble .ts .tick{margin-left:3px;color:#53bdeb}
+.bubble .fail-tag{display:inline-block;margin-top:4px;background:#fdecea;color:#c0392b;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px}
 
 /* Rich content: image card (avatar/profile), list message (areas/founders/mentors),
    quick-reply buttons, and CTA link - matching how each actually renders on WhatsApp. */
-.bubble img.media{display:block;width:100%;max-width:260px;border-radius:6px 6px 2px 2px;margin-bottom:6px;background:#0e0e0e}
+.bubble img.media{display:block;width:100%;max-width:260px;border-radius:6px 6px 2px 2px;margin-bottom:6px;background:#e9edef}
 .bubble .caption{white-space:pre-wrap}
 .list-head{font-weight:700;margin-bottom:2px}
-.list-body{color:#e9edef}
-.list-btn{display:block;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:#53bdeb;font-weight:600;font-size:13px;text-align:center;cursor:pointer}
-.list-rows{margin-top:6px;font-size:12px;color:#cfe8e0}
-.list-rows summary{cursor:pointer;color:#8fd6c4;font-size:11px;list-style:none}
-.list-row{padding:4px 0;border-top:1px solid rgba(255,255,255,.08)}
+.list-body{color:#111b21}
+.list-btn{display:block;margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.08);color:#008069;font-weight:600;font-size:13px;text-align:center;cursor:pointer}
+.list-rows{margin-top:6px;font-size:12px;color:#3b4a54}
+.list-rows summary{cursor:pointer;color:#008069;font-size:11px;list-style:none}
+.list-row{padding:4px 0;border-top:1px solid rgba(0,0,0,.06)}
 .list-row .rt{font-weight:600}
-.list-row .rd{color:#a9c9c1;font-size:11px}
-.btn-pill{display:block;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:#53bdeb;font-weight:600;font-size:13px;text-align:center}
-.cta-pill{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:#53bdeb;font-weight:600;font-size:13px}
-.tpl-tag{font-size:10.5px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#8fd6c4;margin-bottom:4px}
-.tap-note{align-self:center;background:rgba(255,255,255,.06);color:#8696a0;font-size:11.5px;padding:4px 10px;border-radius:8px;margin:4px 0}
+.list-row .rd{color:#667781;font-size:11px}
+.btn-pill{display:block;margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.08);color:#008069;font-weight:600;font-size:13px;text-align:center}
+.cta-pill{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.08);color:#008069;font-weight:600;font-size:13px}
+.tpl-tag{font-size:10.5px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#008069;margin-bottom:4px}
+.tap-note{align-self:center;background:rgba(0,0,0,.05);color:#667781;font-size:11.5px;padding:4px 10px;border-radius:8px;margin:4px 0}
 
-.state-bar{border-top:1px solid #1e1e1e;padding:8px 20px;display:flex;gap:10px;flex-wrap:wrap;background:#0d0d0d;font-size:11px;flex-shrink:0}
-.state-item{background:#141414;border:1px solid #2a2a2a;border-radius:6px;padding:3px 10px;color:#888}
-.state-item strong{color:#a5b4fc;margin-right:4px}
+.state-bar{border-top:1px solid #d1d7db;padding:8px 20px;display:flex;gap:10px;flex-wrap:wrap;background:#f7f8f8;font-size:11px;flex-shrink:0}
+.state-item{background:#fff;border:1px solid #e9edef;border-radius:6px;padding:3px 10px;color:#54656f}
+.state-item strong{color:#008069;margin-right:4px}
 
-.toast{position:fixed;bottom:24px;right:24px;background:#22c55e;color:#fff;font-size:13px;font-weight:600;padding:10px 18px;border-radius:8px;opacity:0;transition:.3s;pointer-events:none}
+.toast{position:fixed;bottom:24px;right:24px;background:#25d366;color:#fff;font-size:13px;font-weight:600;padding:10px 18px;border-radius:8px;opacity:0;transition:.3s;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .toast.show{opacity:1}
+
+/* Send-template modal - the one path that can message a number outside the
+   24h window; kept as a real UI control (not a raw script) so a send is never
+   invisible in this dashboard the way the very first one was. */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:50}
+.modal{background:#fff;border-radius:10px;padding:20px;width:380px;max-width:90vw;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.modal h3{font-size:15px;color:#111b21;margin-bottom:12px}
+.modal label{display:block;font-size:11.5px;color:#54656f;font-weight:600;margin:10px 0 4px}
+.modal input,.modal select{width:100%;background:#f0f2f5;border:1px solid #d1d7db;border-radius:6px;color:#111b21;font-size:13px;padding:7px 10px;outline:none}
+.modal input:focus,.modal select:focus{border-color:#008069}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.modal-note{font-size:11px;color:#8696a0;margin-top:10px;line-height:1.5}
 </style>
 </head>
 <body>
@@ -434,6 +451,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0
   <div class="header-right">
     <span class="refresh-info" id="lastRefresh"></span>
     <a class="btn" href="/admin/mentors${qs}">Mentors</a>
+    <button class="btn" onclick="openTemplateModal()">+ Send template</button>
     <button class="btn" onclick="tick()">↻ Refresh</button>
     <div class="live" title="Auto-refreshes every 5s"></div>
   </div>
@@ -450,15 +468,32 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0
   </div>
   <div class="thread">
     <div class="thread-header" id="threadHeader">
-      <div class="thread-info"><span style="color:#333;font-size:13px">Select a conversation</span></div>
+      <div class="thread-info"><span style="color:#54656f;font-size:13px">Select a conversation</span></div>
     </div>
     <div class="thread-body" id="threadBody">
-      <div class="empty">← Pick a conversation from the sidebar<br><span style="color:#2a2a2a;font-size:11px">Auto-refreshes every 5 seconds</span></div>
+      <div class="empty">← Pick a conversation from the sidebar<br><span style="color:#a9b4bb;font-size:11px">Auto-refreshes every 5 seconds</span></div>
     </div>
     <div class="state-bar" id="stateBar" style="display:none"></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="tplModal" style="display:none">
+  <div class="modal">
+    <h3>Send a template message</h3>
+    <label>WhatsApp number (with country code)</label>
+    <input type="text" id="tplWaId" placeholder="e.g. 919876543210">
+    <label>Template name</label>
+    <input type="text" id="tplName" placeholder="e.g. build3_updates_optin">
+    <label>Language code</label>
+    <input type="text" id="tplLang" value="en">
+    <div class="modal-actions">
+      <button class="btn" onclick="closeTemplateModal()">Cancel</button>
+      <button class="btn" style="color:#fff;background:#008069;border-color:#008069" onclick="sendTemplate()">Send</button>
+    </div>
+    <div class="modal-note">Only works for an APPROVED template on this WABA - the only way to message a number outside the 24h window. No body-variable support yet; use a variable-free template.</div>
+  </div>
+</div>
 
 <script>
 const API = '${apiBase}';
@@ -504,6 +539,13 @@ function relTime(iso) {
   return Math.floor(h / 24) + 'd ago';
 }
 
+// Default WhatsApp-style avatar (gray circle + person silhouette) - every
+// contact here is a phone number with no profile photo we have any right to
+// fetch, so this is the one honest default, not a placeholder to be replaced.
+function avatarSvg() {
+  return '<svg viewBox="0 0 24 24"><rect width="24" height="24" fill="#dfe5e7"/><path d="M12 12.5c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4Zm0 2c-3.3 0-8 1.6-8 4.5V21h16v-2c0-2.9-4.7-4.5-8-4.5Z" fill="#b0b8bc"/></svg>';
+}
+
 function lastUserMsg(hist) {
   if (!hist || !hist.length) return '';
   for (let i = hist.length - 1; i >= 0; i--) {
@@ -538,6 +580,7 @@ function renderList() {
     // at 10) is only a fallback for when that table isn't reachable.
     const count = c.message_count != null ? c.message_count : hist.length;
     return \`<div class="conv-item\${active}" onclick="selectConv('\${escJs(c.wa_id)}')">
+      <div class="conv-avatar">\${avatarSvg()}</div>
       <div class="conv-num">\${esc(num)}</div>
       \${c.founder_slug ? \`<div class="conv-name">\${esc(c.founder_slug)}</div>\` : ''}
       <div class="conv-time">\${relTime(c.last_message_at)}</div>
@@ -630,11 +673,12 @@ async function loadThread(waId) {
   const countLabel = count ? \`\${count} messages\` : legacyCount ? \`\${legacyCount} messages (legacy)\` : '0 messages';
 
   document.getElementById('threadHeader').innerHTML = \`
+    <div class="thread-avatar">\${avatarSvg()}</div>
     <div class="thread-info">
       <div class="thread-num">\${esc(num)}</div>
       <div class="thread-meta">
         Last active \${relTime(conv.last_message_at)} &nbsp;·&nbsp; \${countLabel}
-        \${conv.founder_slug ? \` &nbsp;·&nbsp; <span style="color:#6366f1">\${esc(conv.founder_slug)}</span>\` : ''}
+        \${conv.founder_slug ? \` &nbsp;·&nbsp; <span style="color:#008069">\${esc(conv.founder_slug)}</span>\` : ''}
       </div>
     </div>
     <button class="btn danger" onclick="clearConv('\${escJs(waId)}', event)">✕ Clear state</button>\`;
@@ -712,6 +756,32 @@ async function tick() {
   if (selected) await loadThread(selected);
 }
 
+function openTemplateModal() {
+  document.getElementById('tplWaId').value = selected || '';
+  document.getElementById('tplModal').style.display = 'flex';
+}
+
+function closeTemplateModal() {
+  document.getElementById('tplModal').style.display = 'none';
+}
+
+async function sendTemplate() {
+  const waId = document.getElementById('tplWaId').value.trim();
+  const name = document.getElementById('tplName').value.trim();
+  const languageCode = document.getElementById('tplLang').value.trim() || 'en';
+  if (!waId || !name) { showToast('Number and template name are required'); return; }
+  const r = await fetch(API + '/send-template' + QS, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ waId, name, languageCode }),
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) { showToast('Send failed: ' + (body.error || r.status)); return; }
+  closeTemplateModal();
+  showToast('Template sent');
+  await tick();
+}
+
 tick();
 setInterval(tick, 5000);
 </script>
@@ -730,36 +800,38 @@ function mentorsHtml(token) {
 <title>build3 - mentors</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0e0e0;min-height:100vh}
-.header{background:#111;border-bottom:1px solid #1e1e1e;padding:10px 20px;display:flex;align-items:center;gap:12px}
-.logo{font-size:15px;font-weight:700;color:#fff}.logo span{color:#6366f1}
-.badge{background:#1e1e2e;border:1px solid #2d2d4a;border-radius:6px;color:#a5b4fc;font-size:11px;font-weight:600;padding:2px 8px}
-.btn{background:#1e1e2e;border:1px solid #2d2d4a;border-radius:7px;color:#a5b4fc;cursor:pointer;font-size:12px;font-weight:600;padding:6px 12px;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
-.btn:hover{background:#252540;border-color:#4f46e5}
-.btn.primary{background:#4f46e5;color:#fff;border-color:#4f46e5}
-.btn.danger{background:#1e1010;border-color:#4a1a1a;color:#f87171}
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#ededed;color:#111b21;min-height:100vh}
+.header{background:#f0f2f5;border-bottom:1px solid #d1d7db;padding:10px 20px;display:flex;align-items:center;gap:12px}
+.logo{font-size:15px;font-weight:700;color:#111b21}.logo span{color:#008069}
+.badge{background:#e9edef;border:1px solid #d1d7db;border-radius:6px;color:#54656f;font-size:11px;font-weight:600;padding:2px 8px}
+.btn{background:#fff;border:1px solid #d1d7db;border-radius:7px;color:#008069;cursor:pointer;font-size:12px;font-weight:600;padding:6px 12px;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.btn:hover{background:#f0f2f5;border-color:#008069}
+.btn.primary{background:#008069;color:#fff;border-color:#008069}
+.btn.primary:hover{background:#017561}
+.btn.danger{background:#fff;border-color:#f0d4d4;color:#e03131}
+.btn.danger:hover{background:#fdecea;border-color:#e03131}
 .right{margin-left:auto;display:flex;gap:10px}
 .wrap{padding:18px 20px;max-width:1100px;margin:0 auto}
-.banner{background:#1a160a;border:1px solid #4a3a1a;color:#e8c97a;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:14px;display:none}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;color:#666;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid #1e1e1e}
-td{padding:10px;border-bottom:1px solid #161616;vertical-align:top}
-tr.inactive{opacity:.45}
-.name{font-weight:600;color:#e0e0e0}
-.areas span{display:inline-block;background:#1e1e2e;color:#a5b4fc;font-size:10px;padding:1px 6px;border-radius:4px;margin:1px 2px 1px 0}
-.link{color:#027EB5;font-size:11px;word-break:break-all}
+.banner{background:#fff7e0;border:1px solid #f0d98c;color:#8a6d1a;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:14px;display:none}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border-radius:8px;overflow:hidden}
+th{text-align:left;color:#667781;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid #e9edef}
+td{padding:10px;border-bottom:1px solid #f2f2f2;vertical-align:top}
+tr.inactive{opacity:.5}
+.name{font-weight:600;color:#111b21}
+.areas span{display:inline-block;background:#e7f6f1;color:#008069;font-size:10px;padding:1px 6px;border-radius:4px;margin:1px 2px 1px 0}
+.link{color:#027eb5;font-size:11px;word-break:break-all}
 .muted{color:#667781;font-size:12px}
 .actions{white-space:nowrap;text-align:right}
 .actions .btn{padding:4px 9px;font-size:11px;margin-left:4px}
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
-.modal{background:#141414;border:1px solid #2a2a2a;border-radius:12px;width:520px;max-width:100%;padding:20px}
-.modal h2{font-size:16px;margin-bottom:14px}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+.modal{background:#fff;border:1px solid #d1d7db;border-radius:12px;width:520px;max-width:100%;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,.2)}
+.modal h2{font-size:16px;margin-bottom:14px;color:#111b21}
 .field{margin-bottom:12px}
-.field label{display:block;font-size:12px;color:#888;margin-bottom:4px}
-.field input,.field textarea,.field select{width:100%;background:#0e0e0e;border:1px solid #2a2a2a;border-radius:7px;color:#e0e0e0;font-size:13px;padding:8px 10px;outline:none;font-family:inherit}
-.field input:focus,.field textarea:focus{border-color:#4f46e5}
+.field label{display:block;font-size:12px;color:#54656f;margin-bottom:4px}
+.field input,.field textarea,.field select{width:100%;background:#f0f2f5;border:1px solid #d1d7db;border-radius:7px;color:#111b21;font-size:13px;padding:8px 10px;outline:none;font-family:inherit}
+.field input:focus,.field textarea:focus{border-color:#008069}
 .areachecks{display:flex;flex-wrap:wrap;gap:6px}
-.areachecks label{display:inline-flex;align-items:center;gap:4px;background:#0e0e0e;border:1px solid #2a2a2a;border-radius:6px;padding:4px 8px;font-size:12px;color:#bbb;cursor:pointer}
+.areachecks label{display:inline-flex;align-items:center;gap:4px;background:#f0f2f5;border:1px solid #d1d7db;border-radius:6px;padding:4px 8px;font-size:12px;color:#54656f;cursor:pointer}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 </style>
 </head>
@@ -804,7 +876,7 @@ const AREA_KEYS = ${areaKeys};
 let editing = null;
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function banner(msg, ok){const b=document.getElementById('banner');b.textContent=msg;b.style.display='block';b.style.color=ok?'#7ee0a0':'#e8c97a';b.style.borderColor=ok?'#1a4a2a':'#4a3a1a';b.style.background=ok?'#0a1a10':'#1a160a';}
+function banner(msg, ok){const b=document.getElementById('banner');b.textContent=msg;b.style.display='block';b.style.color=ok?'#1e7d4f':'#8a6d1a';b.style.borderColor=ok?'#bfe6d2':'#f0d98c';b.style.background=ok?'#eafaf1':'#fff7e0';}
 
 async function load(){
   const r = await fetch('/admin/api/mentors'+QS);
