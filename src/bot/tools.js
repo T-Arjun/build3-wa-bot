@@ -3,9 +3,11 @@
 const founders = require('../domain/founders');
 const { findCofounders } = require('../domain/matching');
 const mentors = require('../domain/mentors');
+const perks = require('../domain/perks');
 const fmt = require('./format');
 const { SECTORS, STARTUP_STAGES, LOOKING_FOR } = require('../domain/enums');
 const { AREA_KEYS, areaLabel } = require('../domain/mentorAreas');
+const { CATEGORY_KEYS, categoryLabel } = require('../domain/perkCategories');
 
 const TOO_BROAD = 50;
 
@@ -120,6 +122,37 @@ const definitions = [
       name: 'get_mentor',
       description:
         "Show one mentor's profile card with their booking link and the prep-doc / feedback reminders. Use the slug from a list_mentors result.",
+      parameters: {
+        type: 'object',
+        properties: {
+          slug: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_perks',
+      description:
+        'Browse build3\'s startup perks & credits (free/discounted SaaS credits, tools, coworking, hiring - negotiated for build3 founders to save money and stretch runway). Call with NO args to show the perk categories; with `category` to list perks in one category; with `query` to surface perks for a need the founder describes (e.g. "cloud credits", "CRM", "payments", "design tool", "coworking").',
+      parameters: {
+        type: 'object',
+        properties: {
+          category: { type: 'string', enum: CATEGORY_KEYS, description: 'category to list perks for' },
+          query: { type: 'string', description: 'free-text need the founder has' },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_perk',
+      description:
+        "Show one perk's full details, including how to redeem it (link, email, or steps). Use the slug from a list_perks result.",
       parameters: {
         type: 'object',
         properties: {
@@ -503,6 +536,45 @@ const impls = {
       note: 'The prep-doc link and the post-call feedback link have been sent as a message right below yours. Confirm in one warm line; do NOT restate or re-list the links.',
     };
   },
+
+  async list_perks(args, ctx) {
+    // Need search: "any cloud credits?" / "we need a CRM" / proactive path.
+    if (args.query && !args.category) {
+      const matches = await perks.searchByText(args.query);
+      if (matches.length === 1) {
+        pushPerkCard(ctx, matches[0]);
+        return { status: 'shown', name: matches[0].name, note: PERK_SHOWN_NOTE };
+      }
+      if (matches.length > 1) {
+        const capped = matches.slice(0, 10);
+        pushPerkList(ctx, capped, 'perks that could help with that. tap one for how to get it:');
+        return { status: 'ok', shown: capped.length, note: LIST_SHOWN_NOTE };
+      }
+      // Nothing matched that need - nudge the model to the category picker
+      // rather than dead-ending or inventing a perk we don't have.
+      return {
+        status: 'no_perk_match',
+        note: 'No perk matches that need. Call list_perks again with NO args to show the category picker; do not invent a perk or claim one exists.',
+        categories: CATEGORY_KEYS,
+      };
+    }
+    // Category chosen.
+    if (args.category && CATEGORY_KEYS.includes(args.category)) {
+      const list = await perks.listByCategory(args.category);
+      if (!list.length) return { status: 'none', category: args.category };
+      pushPerkList(ctx, list, `${categoryLabel(args.category)} perks. tap one for how to get it:`);
+      return { status: 'ok', category: args.category, shown: list.length, note: LIST_SHOWN_NOTE };
+    }
+    // Default: show the category picker.
+    return showCategories(ctx);
+  },
+
+  async get_perk(args, ctx) {
+    const p = await perks.getBySlug(args.slug);
+    if (!p) return { status: 'none' };
+    pushPerkCard(ctx, p);
+    return { status: 'shown', name: p.name, access_url: p.access_url || undefined, note: PERK_SHOWN_NOTE };
+  },
 };
 
 const MENTOR_SHOWN_NOTE =
@@ -580,4 +652,64 @@ function pushMentorCard(ctx, s) {
   });
 }
 
-module.exports = { definitions, impls, pushProfile, pushMentorCard, hasAnyFilter, toFilters, widenedSearchDisclosure };
+const PERK_SHOWN_NOTE =
+  "Your text reply is sent FIRST, then the perk's full details (including exactly how to redeem it - link, email, or steps) appear right below it as a message, followed by a 'More perks' button. Open with a warm 1-2 line lowercase lead-in affirming the pick (build3 tone). Do NOT repeat the perk's details or the redemption steps - they're right there on the card. If a link or email is how they redeem, don't type it yourself; the card carries it.";
+
+/** Push the perk-category picker list. */
+async function showCategories(ctx) {
+  const categories = await perks.listCategories();
+  ctx.outbox.push({
+    kind: 'list',
+    header: 'Perks & credits',
+    body: 'startup perks & credits build3 has lined up to save you money and stretch runway. pick a category:',
+    button: 'Choose a category',
+    rows: categories.map(fmt.categoryRow),
+  });
+  ctx.state.last_results = []; // not a founder list - disable founder ordinal pick
+  return { status: 'categories', count: categories.length, note: LIST_SHOWN_NOTE };
+}
+
+/** Push a list of perks and remember their slugs for a typed ("2") selection. */
+function pushPerkList(ctx, list, body) {
+  ctx.outbox.push({
+    kind: 'list',
+    header: 'Perks & credits',
+    body,
+    button: 'View perk',
+    rows: list.map(fmt.perkRow),
+  });
+  ctx.state.last_results = []; // not a founder list
+  ctx.state.perk_results = list.map((p) => p.slug);
+}
+
+/**
+ * Up to three messages:
+ *  1. An overview text (name, objective, trimmed description).
+ *  2. The "how to get it" text (link/email/steps) - a SEPARATE message so a long
+ *     description can't push the redemption steps past WhatsApp's 1024 cap.
+ *  Both are plain text, not a cta_url card, since several perks are email-only
+ *  or multi-step (see format.perkCard / perkAccess).
+ *  3. A "More perks" button row (back to the category picker). perkcat: handler
+ *     lives in handler.routeReply.
+ */
+function pushPerkCard(ctx, p) {
+  ctx.outbox.push({ kind: 'text', body: fmt.perkCard(p) });
+  const access = fmt.perkAccess(p);
+  if (access) ctx.outbox.push({ kind: 'text', body: access });
+  ctx.outbox.push({
+    kind: 'buttons',
+    body: 'want to browse more perks? 👇',
+    buttons: [{ id: `perkcat:${(p.categories && p.categories[0]) || 'cloud'}`, title: 'More perks' }],
+  });
+}
+
+module.exports = {
+  definitions,
+  impls,
+  pushProfile,
+  pushMentorCard,
+  pushPerkCard,
+  hasAnyFilter,
+  toFilters,
+  widenedSearchDisclosure,
+};

@@ -285,6 +285,57 @@ function mentorCard(s) {
   return lines.join('\n');
 }
 
+// ─── Perks & credits ─────────────────────────────────────────────────────────
+
+/** A list row for a single perk. id encodes the get-perk action. */
+function perkRow(p) {
+  return {
+    id: `perk:${p.slug}`,
+    title: truncate(p.name || '', 24),
+    description: truncate(p.objective || '', 72),
+  };
+}
+
+/** A list row for a perk category. id encodes the list-by-category action. */
+function categoryRow(c) {
+  return {
+    id: `perkcat:${c.key}`,
+    title: truncate(c.label, 24),
+    description: `${c.count} perk${c.count === 1 ? '' : 's'}`,
+  };
+}
+
+/**
+ * Perk OVERVIEW, rendered as a plain text message (NOT a cta_url card): several
+ * perks are email-only or multi-step, and WhatsApp's cta_url requires a real
+ * URL, so a text message handles all of them uniformly (WhatsApp auto-links
+ * both URLs and emails). Name + objective + a trimmed description. The
+ * actionable how-to-access is a SEPARATE message (see perkAccess) so a long
+ * description can never push the redemption steps past WhatsApp's 1024 cap.
+ */
+function perkCard(p) {
+  const lines = [`*${p.name}*`];
+  if (p.objective) lines.push(p.objective);
+  const desc = realText(p.description);
+  if (desc) {
+    lines.push('');
+    lines.push(truncate(desc, 400));
+  }
+  return lines.join('\n');
+}
+
+/**
+ * The actionable "how to redeem" message, sent right after the overview. Kept
+ * as its own message (and capped to stay under WhatsApp's 1024 body limit) so
+ * the steps/link/email always arrive intact. Source how_to_access is authored
+ * to fit; truncate is a last-resort guard, surfaced by the render audit.
+ */
+function perkAccess(p) {
+  const how = String(p.how_to_access || '').trim();
+  if (!how) return '';
+  return `how to get it:\n${truncate(how, 1000)}`;
+}
+
 module.exports = {
   avatarFor,
   displayName,
@@ -301,4 +352,8 @@ module.exports = {
   mentorCard,
   bookingMessage,
   prepMessage,
+  perkRow,
+  categoryRow,
+  perkCard,
+  perkAccess,
 };

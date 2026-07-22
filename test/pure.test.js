@@ -298,6 +298,31 @@ test('matchCaption bakes in the per-candidate cofounder-intent status line', () 
   assert.doesNotMatch(noStatus, /\(\)/);
 });
 
+test('perkCard is the overview; perkAccess carries the how-to separately', () => {
+  const fmt = require('../src/bot/format');
+  const p = {
+    name: 'Notion',
+    objective: 'task management and project tracking',
+    description: 'a long description '.repeat(40), // ~720 chars, must be trimmed
+    how_to_access: 'submit your application at: https://ntn.so/build3',
+  };
+  const card = fmt.perkCard(p);
+  const access = fmt.perkAccess(p);
+  // overview leads with the name + objective, trims the description, and does NOT
+  // contain the redemption link (that's the access message's job)
+  assert.match(card, /\*Notion\*/);
+  assert.match(card, /task management/);
+  assert.ok(!card.includes('ntn.so'), 'overview must not carry the redemption link');
+  assert.ok(card.length <= 1024);
+  // access carries the full how-to verbatim, under the WhatsApp body cap
+  assert.match(access, /how to get it:/);
+  assert.ok(access.includes('https://ntn.so/build3'));
+  assert.ok(access.length <= 1024);
+  // an email-only perk still produces an access message (no URL required)
+  const emailPerk = { name: 'Canva', objective: 'design', how_to_access: 'email studio@build3.org to activate' };
+  assert.match(fmt.perkAccess(emailPerk), /studio@build3\.org/);
+});
+
 test('avatarFor never yields an SVG WhatsApp would silently drop', () => {
   const fmt = require('../src/bot/format');
   // photoless founders in the source carry a ui-avatars SVG URL, not null

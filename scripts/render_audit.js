@@ -14,6 +14,7 @@ require('dotenv').config();
 const { supabase } = require('../src/config/supabase');
 const fmt = require('../src/bot/format');
 const { MENTORS } = require('../src/domain/mentors.data');
+const { PERKS } = require('../src/domain/perks.data');
 const { lookingForStatus } = require('../src/domain/matching');
 
 const WA_LIMITS = { rowTitle: 24, rowDesc: 72, caption: 1024, body: 1024 };
@@ -75,6 +76,23 @@ function auditMentor(s) {
   if (!row.description) flag('mentorRow', s.slug, 'empty description', row.title);
 }
 
+function auditPerk(p) {
+  // Overview message (name/objective/trimmed description) - must fit the body cap.
+  const card = fmt.perkCard(p);
+  if (JUNK.test(card)) flag('perkCard', p.slug, 'placeholder junk', (card.split('\n').find((l) => JUNK.test(l)) || card).slice(0, 110));
+  if (card.length > WA_LIMITS.body) flag('perkCard', p.slug, `overview >${WA_LIMITS.body} chars`, `${card.length} chars`);
+  // How-to-access message (the actionable part) - separate message, must fit the
+  // cap AND carry the real steps in full (source text is authored to fit; a
+  // truncation here means an entry needs tightening, like Microsoft did).
+  const access = fmt.perkAccess(p);
+  if (!access) flag('perkAccess', p.slug, 'empty how-to-access (nothing actionable)', p.name);
+  if (access.length > WA_LIMITS.body) flag('perkAccess', p.slug, `how-to-access >${WA_LIMITS.body} chars (WA truncates the tail)`, `${access.length} chars`);
+  if (p.how_to_access && !access.includes(p.how_to_access.trim())) flag('perkAccess', p.slug, 'how-to-access got truncated - tighten the source entry', `${p.how_to_access.length} chars`);
+  const row = fmt.perkRow(p);
+  if (row.title.length > WA_LIMITS.rowTitle) flag('perkRow', p.slug, `title >${WA_LIMITS.rowTitle}`, row.title);
+  if (!row.description) flag('perkRow', p.slug, 'empty description', row.title);
+}
+
 (async () => {
   const { data: founders, error } = await supabase()
     .from('founders')
@@ -89,9 +107,10 @@ function auditMentor(s) {
     auditAvatar(f);
   }
   for (const s of MENTORS) auditMentor(s);
+  for (const p of PERKS) auditPerk(p);
 
   // Summary
-  console.log(`audited ${founders.length} founders x 3 surfaces + ${MENTORS.length} mentors`);
+  console.log(`audited ${founders.length} founders x 3 surfaces + ${MENTORS.length} mentors + ${PERKS.length} perks`);
   if (!defects.length) {
     console.log('NO DEFECTS 🎉');
   } else {

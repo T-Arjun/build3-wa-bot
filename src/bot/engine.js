@@ -208,6 +208,8 @@ function summarize(finalText, outbox) {
       const titles = (m.rows || []).map((r) => r.title).slice(0, 8).join(', ');
       if (ids.some((id) => id.startsWith('area:'))) shown.push(`a list of mentor areas: ${titles}`);
       else if (ids.some((id) => id.startsWith('mentor:'))) shown.push(`a list of mentors: ${titles}`);
+      else if (ids.some((id) => id.startsWith('perkcat:'))) shown.push(`a list of perk categories: ${titles}`);
+      else if (ids.some((id) => id.startsWith('perk:'))) shown.push(`a list of perks: ${titles}`);
       else shown.push(`a list of founders: ${titles}`);
     } else if (m.kind === 'image') {
       shown.push(`the profile of ${String(m.caption || '').split('\n')[0].replace(/\*/g, '').trim()}`);

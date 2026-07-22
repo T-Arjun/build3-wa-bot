@@ -47,6 +47,7 @@ test('protected: tool-choice and matching sections are still present', () => {
   assert.match(P, /THEM vs WHO THEY WANT/);
   assert.match(P, /CHOOSING search_founders vs find_cofounders/);
   assert.match(P, /MENTOR HOURS \(list_mentors \/ get_mentor\)/);
+  assert.match(P, /PERKS & CREDITS \(list_perks \/ get_perk\)/);
   assert.match(P, /TURNING WHAT THEY SAY INTO A SEARCH/);
   assert.match(P, /PERSONALIZING COFOUNDER MATCHES/);
   assert.match(P, /COFOUNDER-INTENT HONESTY:/);

@@ -4,12 +4,14 @@ const { env } = require('../config/env');
 const engine = require('./engine');
 const founders = require('../domain/founders');
 const mentors = require('../domain/mentors');
+const perks = require('../domain/perks');
 const { getConversation, saveConversation } = require('./conversation');
 const { sendOutbox: sendOutboxRaw } = require('./sendOutbox');
 const messageLog = require('../domain/messageLog');
 const { resolveTypedSelection } = require('./ordinal');
-const { pushProfile, pushMentorCard } = require('./tools');
+const { pushProfile, pushMentorCard, pushPerkCard } = require('./tools');
 const { areaLabel } = require('../domain/mentorAreas');
+const { categoryLabel } = require('../domain/perkCategories');
 const { untrackedNote, selfHarmResponse } = require('./guards');
 const { buildMentionNote, findMentions } = require('./mentions');
 const fmt = require('./format');
@@ -164,6 +166,12 @@ async function processEvent(ev) {
     if (handled) return;
   }
 
+  // 1.45) Typed selection over a perk list ("2", "the first one") - pre-LLM.
+  if (ev.text && Array.isArray(conv.draft?.perk_results) && conv.draft.perk_results.length) {
+    const handled = await routePerkTypedSelection(ev, to, conv, baseState);
+    if (handled) return;
+  }
+
   // 1.5) Typed list selection ("2", "show the first one") - deterministic, pre-LLM.
   // Goes slug → getBySlug, bypassing the brittle name lookup, and commits focus
   // ONLY if the card actually sent.
@@ -299,6 +307,10 @@ function persistDraft(conv, state, sendsOk = true) {
   // search/match (topic_changed) or a viewed founder profile ends the mentor list.
   if (state.mentor_results) draft.mentor_results = state.mentor_results;
   else if (state.topic_changed || (state.focus && sendsOk)) delete draft.mentor_results;
+  // Perk list shown this turn → remember slugs for a typed ("2") pick. Same
+  // lifecycle as the mentor list: a founder search/match or a viewed profile ends it.
+  if (state.perk_results) draft.perk_results = state.perk_results;
+  else if (state.topic_changed || (state.focus && sendsOk)) delete draft.perk_results;
   // Sticky safety register burns down one engine turn at a time (set to 2 when
   // the self-harm guard fires). Interactive taps don't consume it - only real
   // conversational turns do, since only those can drift back to a chirpy register.
@@ -458,6 +470,47 @@ async function routeReply(ev, to, conv, baseState) {
     return true;
   }
 
+  // ─── Perks & credits ────────────────────────────────────────────────────────
+  if (id.startsWith('perkcat:')) {
+    const key = id.slice('perkcat:'.length);
+    const list = await perks.listByCategory(key);
+    const draft = { ...(conv.draft || {}), intro_sent: true };
+    if (!list.length) {
+      await sendText(to, 'no perks in that category right now. try another?');
+    } else {
+      await sendOutbox(to, [
+        {
+          kind: 'list',
+          header: 'Perks & credits',
+          body: `${categoryLabel(key)} perks. tap one for how to get it:`,
+          button: 'View perk',
+          rows: list.map(fmt.perkRow),
+        },
+      ]);
+      draft.perk_results = list.map((p) => p.slug);
+    }
+    await saveConversation(to, { ...baseState, last_results: [], draft });
+    return true;
+  }
+
+  if (id.startsWith('perk:')) {
+    const slug = id.slice('perk:'.length);
+    const p = await perks.getBySlug(slug);
+    const draft = { ...(conv.draft || {}), intro_sent: true };
+    if (p) {
+      const ctx = { outbox: [], state: {} };
+      pushPerkCard(ctx, p);
+      const results = await sendOutbox(to, ctx.outbox);
+      if (!results.every((r) => r.ok)) {
+        await sendText(to, "sorry, couldn't load that perk just now. try again?");
+      }
+    } else {
+      await sendText(to, "hmm, we couldn't find that perk anymore.");
+    }
+    await saveConversation(to, { ...baseState, draft });
+    return true;
+  }
+
   return false; // not an id we own → fall through to the engine
 }
 
@@ -489,6 +542,40 @@ async function routeMentorTypedSelection(ev, to, conv, baseState) {
     hist.push({
       role: 'assistant',
       content: `(internal note - already shown to the user: the mentor card for ${sel.founder.name})`,
+    });
+  }
+  await saveConversation(to, { ...baseState, history: hist.slice(-10), draft });
+  return true;
+}
+
+/**
+ * Handle a typed selection ("2", "the first one") over a perk list shown last
+ * turn. Mirrors routeMentorTypedSelection but resolves against perk slugs and
+ * sends the perk card. Returns true if it was an ordinal we owned.
+ */
+async function routePerkTypedSelection(ev, to, conv, baseState) {
+  const sel = await resolveTypedSelection({
+    text: ev.text,
+    lastResults: conv.draft.perk_results,
+    getBySlug: perks.getBySlug,
+    sendCard: async (p) => {
+      const ctx = { outbox: [], state: {} };
+      pushPerkCard(ctx, p);
+      const results = await sendOutbox(to, ctx.outbox);
+      return results.every((r) => r.ok);
+    },
+  });
+  if (!sel.handled) return false; // not an ordinal (or stale slug) → let the LLM handle it
+
+  const hist = Array.isArray(conv.history) ? conv.history : [];
+  const draft = { ...(conv.draft || {}), intro_sent: true };
+  if (sel.sendFailed) {
+    await sendText(to, "sorry, couldn't load that perk just now. try again?");
+  } else {
+    hist.push({ role: 'user', content: ev.text });
+    hist.push({
+      role: 'assistant',
+      content: `(internal note - already shown to the user: the perk details for ${sel.founder.name})`,
     });
   }
   await saveConversation(to, { ...baseState, history: hist.slice(-10), draft });

@@ -35,6 +35,8 @@ function persistDraft(conv, state) {
   }
   if (state.mentor_results) draft.mentor_results = state.mentor_results;
   else if (state.topic_changed || state.focus) delete draft.mentor_results;
+  if (state.perk_results) draft.perk_results = state.perk_results;
+  else if (state.topic_changed || state.focus) delete draft.perk_results;
   return draft;
 }
 
