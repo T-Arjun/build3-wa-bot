@@ -84,6 +84,12 @@ function buildTarget(requester, filters, self) {
       dharma: self.dharma || null,
       looking_for: ['co-founder, I have a startup'],
       startup_stage: self.stage || filters.stage || null,
+      // 'soft' when the user hedged their own skill claim ("little bit tech")
+      // rather than stating it plainly ("I'm technical") - see tools.js
+      // set_self_profile. Caps the matching prompt's reason-tone confidence so
+      // it doesn't assert "directly complements your engineering" as settled
+      // fact off an assumption nobody confirmed.
+      skillConfidence: self.skillConfidence || null,
     };
   }
   return {

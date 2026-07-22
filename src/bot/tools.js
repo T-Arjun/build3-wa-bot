@@ -11,6 +11,21 @@ const { CATEGORY_KEYS, categoryLabel } = require('../domain/perkCategories');
 
 const TOO_BROAD = 50;
 
+// Deterministic backstop for set_self_profile (real observed failure): asked
+// "your own background?", a founder replying "little bit tech" got locked in
+// as skills:["engineering"] - a firm, categorical tag from language the user
+// themselves hedged. Every downstream match caption then stated "directly
+// complements your engineering" as fact, off an assumption nobody confirmed.
+// The model's own free-text -> category judgment can't be trusted to flag its
+// own uncertainty (same doctrine as widenedSearchDisclosure not trusting the
+// model to disclose a dropped filter) - so this checks the RAW user text
+// directly, independent of whatever confident label the model chose.
+const HEDGE_RE =
+  /\b(a\s+little|little\s+bit|somewhat|some(what)?|not\s+(fully|totally|really|that)|kind\s+of|sort\s+of|part[\s-]?time|mixed|bit\s+of)\b/i;
+function isHedgedSelfClaim(rawText) {
+  return HEDGE_RE.test(String(rawText || ''));
+}
+
 /** OpenAI tool (function) definitions exposed to the model. */
 const definitions = [
   {
@@ -477,7 +492,13 @@ const impls = {
   async set_self_profile(args, ctx) {
     const self = { ...(ctx.self || {}) };
     if (args.name) self.name = args.name;
-    if (Array.isArray(args.skills) && args.skills.length) self.skills = args.skills;
+    if (Array.isArray(args.skills) && args.skills.length) {
+      self.skills = args.skills;
+      // Hedge check runs only when skills are actually being (re)set this turn -
+      // a later turn with a clear, confident restatement should be able to
+      // upgrade confidence back to firm, not stay soft forever from one hedge.
+      self.skillConfidence = isHedgedSelfClaim(ctx.rawText) ? 'soft' : 'firm';
+    }
     if (args.sector) self.sector = args.sector;
     if (args.city) self.city = args.city;
     if (args.stage) self.stage = args.stage;

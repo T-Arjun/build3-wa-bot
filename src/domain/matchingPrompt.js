@@ -113,10 +113,19 @@ function buildUserPrompt(target, candidates, requiredSkills = null) {
   const reqNote = req
     ? `\nHARD REQUIREMENT: the target founder explicitly asked for a co-founder who brings: ${req.join(', ')}. A candidate who does not plausibly bring these skills must score BELOW 40 no matter how complementary they are otherwise, and their reasons must name that gap plainly instead of praising unrelated skills.`
     : '';
+  // The target's own "Skills:" line can come from a HEDGED self-description
+  // ("little bit tech" -> skills:["engineering"]), not a confirmed fact - see
+  // matching.js buildTarget / tools.js set_self_profile. Without this, the
+  // reason-tone rules below treat that guess as certain and produce "Directly
+  // complements your engineering" off an assumption nobody confirmed.
+  const skillHedgeNote =
+    target.skillConfidence === 'soft'
+      ? "\nNOTE ON THE TARGET'S OWN SKILLS: their self-described skills come from a HEDGED statement (something like \"a little bit technical\"), not a confirmed fact. Do NOT use top-tier confident language (\"Directly complements...\", \"Clear fit -\") for the skill-complementarity reason even at a high score - cap that one reason at the 60-79 tier phrasing (\"Strong complement -\", \"Works well -\") or soften it further, regardless of the numeric score. The sector/city/stage/dharma reason is unaffected."
+      : '';
 
   return `TARGET FOUNDER:
 ${targetStr}
-${seekingNote ? `\nContext: ${seekingNote}` : ''}${reqNote}
+${seekingNote ? `\nContext: ${seekingNote}` : ''}${reqNote}${skillHedgeNote}
 
 CANDIDATES (${candidates.length} total):
 ${candidateLines.join('\n')}
