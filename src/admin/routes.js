@@ -85,23 +85,81 @@ router.get('/api/conversations', async (_req, res) => {
       .limit(200);
     if (error) return res.status(500).json({ error: error.message });
     const rows = data || [];
+    const knownIds = new Set(rows.map((r) => r.wa_id));
 
     // `history` is capped to 10 for LLM context - the sidebar badge needs the
-    // REAL total. Read it from the message_log_counts VIEW (grouped server-side
-    // by Postgres) rather than pulling raw rows and tallying in JS - that
-    // scales with the number of conversations, not the size of the whole log,
-    // and never silently under-counts a conversation past some row cap.
+    // REAL total, and message_log_summary (grouped server-side by Postgres,
+    // scaling with the number of conversations rather than total log size)
+    // gives both that count and the real last-activity timestamp in one query.
+    let summary = [];
     try {
-      const { data: countRows, error: countErr } = await supabase()
-        .from('message_log_counts')
-        .select('wa_id, message_count');
-      if (countErr) throw countErr;
+      const { data: summaryRows, error: sumErr } = await supabase()
+        .from('message_log_summary')
+        .select('wa_id, message_count, last_message_at');
+      if (sumErr) throw sumErr;
+      summary = summaryRows || [];
       const counts = {};
-      for (const r of countRows || []) counts[r.wa_id] = r.message_count;
+      for (const r of summary) counts[r.wa_id] = r.message_count;
       for (const c of rows) c.message_count = counts[c.wa_id] || 0;
     } catch (_e) {
       // view unavailable (migration not applied yet) - badge falls back below.
     }
+
+    // A wa_id can have real message_log history with NO conversations row -
+    // e.g. that table was ever cleared/reset while message_log (the
+    // append-only audit trail) survived untouched, and the founder never
+    // messaged again to recreate it. Without this, that founder's entire
+    // conversation silently disappears from the sidebar even though it's
+    // still on record - found live when two real founders' pre-reset
+    // conversations turned out to still be in message_log but invisible here.
+    const orphaned = summary.filter((s) => !knownIds.has(s.wa_id));
+    if (orphaned.length) {
+      try {
+        const { data: previews, error: prevErr } = await supabase()
+          .from('message_log')
+          .select('wa_id, direction, payload')
+          .in(
+            'wa_id',
+            orphaned.map((o) => o.wa_id),
+          )
+          .eq('direction', 'in')
+          .order('id', { ascending: false });
+        if (prevErr) throw prevErr;
+        const previewByWaId = {};
+        for (const m of previews || []) {
+          if (!(m.wa_id in previewByWaId)) previewByWaId[m.wa_id] = m.payload || {};
+        }
+        for (const o of orphaned) {
+          const p = previewByWaId[o.wa_id] || {};
+          rows.push({
+            wa_id: o.wa_id,
+            last_message_at: o.last_message_at,
+            history: [],
+            founder_slug: null,
+            draft: null,
+            message_count: o.message_count,
+            last_preview: p.text || p.body || null,
+            orphaned: true,
+          });
+        }
+        rows.sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
+      } catch (_e) {
+        // preview lookup failed - orphaned conversations still show, just without a preview line.
+        for (const o of orphaned) {
+          rows.push({
+            wa_id: o.wa_id,
+            last_message_at: o.last_message_at,
+            history: [],
+            founder_slug: null,
+            draft: null,
+            message_count: o.message_count,
+            orphaned: true,
+          });
+        }
+        rows.sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
+      }
+    }
+
     res.json(rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -117,7 +175,11 @@ router.get('/api/conversations/:waId', async (req, res) => {
       .eq('wa_id', req.params.waId)
       .maybeSingle();
     if (error) return res.status(500).json({ error: error.message });
-    res.json(data || null);
+    // No conversations row (e.g. that table was reset while message_log
+    // survived) shouldn't mean "nothing to show" - the dashboard's thread
+    // view reads the actual messages from message_log regardless, so this
+    // still needs a shape the client can render against instead of null.
+    res.json(data || { wa_id: req.params.waId, history: [], draft: {}, founder_slug: null, last_message_at: null });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -586,7 +648,7 @@ function renderList() {
   const filtered = q
     ? convData.filter(c => {
         const num = String(c.wa_id).toLowerCase();
-        const preview = lastUserMsg(c.history).toLowerCase();
+        const preview = (lastUserMsg(c.history) || c.last_preview || '').toLowerCase();
         const slug = (c.founder_slug || '').toLowerCase();
         return num.includes(q) || preview.includes(q) || slug.includes(q);
       })
@@ -600,7 +662,7 @@ function renderList() {
   }
   el.innerHTML = filtered.map(c => {
     const hist = c.history || [];
-    const preview = lastUserMsg(hist);
+    const preview = lastUserMsg(hist) || c.last_preview || '';
     const active = selected === c.wa_id ? ' active' : '';
     const num = formatNum(c.wa_id);
     // message_count comes from the unbounded message_log; history.length (capped
