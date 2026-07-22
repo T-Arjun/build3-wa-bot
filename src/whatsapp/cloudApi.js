@@ -123,6 +123,36 @@ function sendImage(to, imageUrl, caption) {
 }
 
 /**
+ * Template ("HSM") message - the ONLY message type Meta allows when initiating
+ * contact with someone who hasn't messaged in during the last 24h (every other
+ * function in this file - sendText, sendButtons, sendList, sendCtaUrl,
+ * sendImage - only works inside that window, opened by the OTHER side sending
+ * first). The template must already exist and be APPROVED on this WABA (Meta
+ * Business Manager -> WhatsApp Manager -> Message Templates); sending an
+ * unknown, unapproved, or wrong-language template name fails with a clear
+ * Graph API error rather than a silent no-op, so a failed send here almost
+ * always means a template/name/language mismatch, not a code bug.
+ *
+ * @param {string} to - recipient's WhatsApp number (E.164 digits, no "+")
+ * @param {string} name - the exact template name as approved in WhatsApp Manager
+ * @param {string} [languageCode='en_US'] - must match the template's approved language
+ * @param {object[]} [components] - Meta's component objects for templates with
+ *   {{1}}-style variables, e.g. [{ type: 'body', parameters: [{ type: 'text', text: 'Arjun' }] }].
+ *   Omit entirely for a template with no variables (e.g. the default "hello_world" sample).
+ */
+function sendTemplate(to, name, languageCode = 'en_US', components) {
+  return send({
+    to,
+    type: 'template',
+    template: {
+      name,
+      language: { code: languageCode },
+      ...(Array.isArray(components) && components.length ? { components } : {}),
+    },
+  });
+}
+
+/**
  * Mark a received message as read AND show a typing indicator - in ONE call.
  *
  * The typing indicator is NOT a standalone message type. The /messages endpoint
@@ -153,4 +183,4 @@ function truncate(s, n) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
-module.exports = { send, sendText, sendButtons, sendList, sendCtaUrl, sendImage, markRead };
+module.exports = { send, sendText, sendButtons, sendList, sendCtaUrl, sendImage, sendTemplate, markRead };

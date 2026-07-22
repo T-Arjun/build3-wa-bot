@@ -6,6 +6,8 @@ const { supabase } = require('../config/supabase');
 const { env } = require('../config/env');
 const { MENTORS } = require('../domain/mentors.data');
 const { AREA_KEYS } = require('../domain/mentorAreas');
+const wa = require('../whatsapp/cloudApi');
+const messageLog = require('../domain/messageLog');
 
 const router = express.Router();
 
@@ -236,6 +238,56 @@ router.delete('/api/mentors/:slug', async (req, res) => {
   }
 });
 
+// ─── API: send a business-initiated template message ─────────────────────────
+// The ONLY way to reach a number that hasn't messaged in within the last 24h
+// (see cloudApi.sendTemplate). This is the single logged path for that - it
+// sends AND writes to message_log AND touches the conversations row in one
+// place, so a template send is never invisible in the dashboard the way a
+// one-off script calling cloudApi.sendTemplate() directly would be (that gap
+// is exactly what happened before this endpoint existed: a real template send
+// left the number's thread starting mid-conversation, with no record of the
+// message that actually opened it).
+router.post('/api/send-template', async (req, res) => {
+  const b = req.body || {};
+  const waId = String(b.waId || '').replace(/[^0-9]/g, '');
+  const name = String(b.name || '').trim();
+  if (!waId || !name) return res.status(400).json({ error: 'waId and name are required' });
+  const languageCode = b.languageCode || 'en';
+  const components = Array.isArray(b.components) ? b.components : undefined;
+
+  let result;
+  let ok = true;
+  try {
+    result = await wa.sendTemplate(waId, name, languageCode, components);
+  } catch (e) {
+    ok = false;
+    result = { error: e.message };
+  }
+
+  // Log the attempt regardless of outcome - a failed template send is exactly
+  // the kind of thing that needs to be visible, not silently swallowed.
+  await messageLog.logOutbound(
+    waId,
+    { kind: 'template', name, languageCode, components, bodyPreview: b.bodyPreview || null },
+    ok,
+  );
+
+  // Make the number appear in the sidebar immediately, even before any reply -
+  // otherwise it's invisible in the dashboard until (if ever) they respond.
+  // Best-effort: the message_log row above is the real record either way.
+  try {
+    await supabase().from('conversations').upsert(
+      { wa_id: waId, last_message_at: new Date().toISOString() },
+      { onConflict: 'wa_id' },
+    );
+  } catch (_e) {
+    // conversations row is a convenience for the sidebar, not the source of truth
+  }
+
+  if (!ok) return res.status(502).json({ error: result.error || 'send failed' });
+  res.json({ ok: true, result });
+});
+
 // ─── Dashboard HTML ──────────────────────────────────────────────────────────
 router.get('/', (req, res) => {
   res.send(dashboardHtml(req.query.token));
@@ -364,6 +416,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0
 .list-row .rd{color:#a9c9c1;font-size:11px}
 .btn-pill{display:block;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:#53bdeb;font-weight:600;font-size:13px;text-align:center}
 .cta-pill{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:#53bdeb;font-weight:600;font-size:13px}
+.tpl-tag{font-size:10.5px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#8fd6c4;margin-bottom:4px}
 .tap-note{align-self:center;background:rgba(255,255,255,.06);color:#8696a0;font-size:11.5px;padding:4px 10px;border-radius:8px;margin:4px 0}
 
 .state-bar{border-top:1px solid #1e1e1e;padding:8px 20px;display:flex;gap:10px;flex-wrap:wrap;background:#0d0d0d;font-size:11px;flex-shrink:0}
@@ -551,6 +604,8 @@ function renderBubble(m) {
     inner = \`\${p.headerImage ? \`<img class="media" src="\${esc(p.headerImage)}" onerror="this.style.display='none'">\` : ''}<div class="list-body">\${esc(p.body || '')}</div><div class="cta-pill">🔗 \${esc(p.title || 'Open link')}</div>\`;
   } else if (m.kind === 'image_received') {
     inner = \`<span class="caption">📷 image received\${p.caption ? ': ' + esc(p.caption) : ''}</span>\`;
+  } else if (m.kind === 'template') {
+    inner = \`<div class="tpl-tag">📋 template: \${esc(p.name || '')}</div><div class="list-body">\${esc(p.bodyPreview || '(no preview saved)')}</div>\`;
   } else {
     inner = esc(JSON.stringify(p));
   }
