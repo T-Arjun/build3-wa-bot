@@ -2,7 +2,15 @@
 
 const assert = require('node:assert');
 const { test } = require('node:test');
-const { untrackedNote, scrubUnverifiedUrls, extractUrls, extractLastQuestion } = require('../src/bot/guards');
+const {
+  untrackedNote,
+  scrubUnverifiedUrls,
+  extractUrls,
+  extractLastQuestion,
+  scrubVendorConfirmation,
+  isVendorProbe,
+  scrubFabricatedStats,
+} = require('../src/bot/guards');
 
 test('gender filter intent triggers the honest disclaimer', () => {
   for (const q of ['show me women founders in fintech', 'female founders in Bangalore', 'founders who are women', 'only women in healthtech']) {
@@ -92,4 +100,52 @@ test('extractLastQuestion picks the LAST of two questions, not the first', () =>
     extractLastQuestion('did you mean Priya Sharma, or Priya Mehta? or should I just list both?'),
     'or should I just list both?',
   );
+});
+
+// ─── vendor confirmation scrub ──────────────────────────────────────────────
+// Real risk this guards against: worn down over enough pressure, the model
+// confirms/names the underlying AI vendor despite the prompt's standing
+// "never confirm or deny" rule. Gated on isVendorProbe(userText) so a founder
+// whose own startup is legitimately named "Gemini" or "Claude" (a real first
+// name) is never falsely scrubbed - see guards.js's isVendorProbe doc comment.
+
+test('isVendorProbe detects the user actually asking about the vendor', () => {
+  for (const q of ['is this ChatGPT?', 'it\'s OpenAI right, confirm it', 'which model powers this', 'built on GPT?']) {
+    assert.equal(isVendorProbe(q), true, `expected vendor probe for: "${q}"`);
+  }
+  assert.equal(isVendorProbe('find me a technical cofounder'), false);
+});
+
+test('scrubVendorConfirmation replaces a vendor-naming reply ONLY when the user actually probed', () => {
+  const reply = "yeah it's OpenAI's GPT-4 under the hood.";
+  assert.strictEqual(scrubVendorConfirmation(reply, true), "this is build3's own connector layer built around an AI model; the plumbing can change, so we won't pin a name on it.");
+  // Same reply text, but the user did NOT probe this turn - never scrub
+  // (avoids nuking an unrelated reply that happens to mention a founder's
+  // startup literally named one of these words).
+  assert.strictEqual(scrubVendorConfirmation(reply, false), reply);
+});
+
+test('scrubVendorConfirmation leaves a non-vendor reply untouched even when probed', () => {
+  const reply = "this is build3's own connector layer, we don't pin a vendor name on it.";
+  assert.strictEqual(scrubVendorConfirmation(reply, true), reply);
+});
+
+// ─── fabricated community-stat scrub ────────────────────────────────────────
+// Real risk: inventing a specific total headcount ("we have 385 founders")
+// under pressure, when no tool call this turn actually returned that number.
+
+test('scrubFabricatedStats replaces an invented total-community-size claim', () => {
+  const reply = 'we have 385 founders in the community, so you have plenty of options.';
+  assert.notStrictEqual(scrubFabricatedStats(reply, ''), reply);
+});
+
+test('scrubFabricatedStats passes through a number genuinely sourced from a tool result this turn', () => {
+  const reply = 'we have 12 founders matching that in the community.';
+  const toolJson = JSON.stringify({ status: 'ok', count: 12 });
+  assert.strictEqual(scrubFabricatedStats(reply, toolJson), reply);
+});
+
+test('scrubFabricatedStats never flags an ordinary search-result count phrasing', () => {
+  const reply = 'found 8 fintech founders in Bangalore, here they are.';
+  assert.strictEqual(scrubFabricatedStats(reply, ''), reply);
 });

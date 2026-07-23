@@ -4,7 +4,13 @@ const { openai } = require('../config/openai');
 const { env } = require('../config/env');
 const { systemPrompt } = require('./prompts');
 const { definitions, impls } = require('./tools');
-const { scrubUnverifiedUrls, extractUrls } = require('./guards');
+const {
+  scrubUnverifiedUrls,
+  extractUrls,
+  scrubVendorConfirmation,
+  isVendorProbe,
+  scrubFabricatedStats,
+} = require('./guards');
 const { isBareYesNo } = require('./intent');
 const log = require('../lib/logger');
 
@@ -161,6 +167,11 @@ async function run(input) {
   // URL after a turn that ended on a pending disambiguation).
   const verifiedUrls = [];
   for (const m of messages) verifiedUrls.push(...extractUrls(m.content));
+  // Every number that legitimately came back from a tool this turn, so
+  // scrubFabricatedStats never flags a genuinely-sourced count (e.g. "found 12
+  // founders in Bangalore") - only an invented total-community-size claim with
+  // a number that appears NOWHERE in any real tool result.
+  let toolResultsJson = '';
 
   let finalText = '';
 
@@ -199,16 +210,20 @@ async function run(input) {
         log.info(
           `turn wa=${ctx.waId || '?'} "${snippet(input.text)}" → ${name} ${JSON.stringify(args)} → ${toolResultSummary(result)}`,
         );
+        const resultJson = JSON.stringify(result);
+        toolResultsJson += resultJson;
         messages.push({
           role: 'tool',
           tool_call_id: call.id,
-          content: JSON.stringify(result),
+          content: resultJson,
         });
       }
       continue; // let the model react to tool results
     }
 
     finalText = scrubUnverifiedUrls((msg.content || '').trim(), verifiedUrls);
+    finalText = scrubVendorConfirmation(finalText, isVendorProbe(input.text));
+    finalText = scrubFabricatedStats(finalText, toolResultsJson);
     log.info(`turn wa=${ctx.waId || '?'} "${snippet(input.text)}" → reply "${snippet(finalText)}"`);
     break;
   }

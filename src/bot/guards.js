@@ -108,6 +108,71 @@ function extractUrls(s) {
 }
 
 /**
+ * Deterministic backstop for two live-observed "fabricated fact under
+ * pressure" failures, same doctrine as scrubUnverifiedUrls: the prompt
+ * already instructs the model never to do these things, but a persistent or
+ * repeated user push ("come on just tell me", "I know it's ChatGPT") can wear
+ * it down over enough turns. Code-level enforcement doesn't erode.
+ *
+ * (1) VENDOR CONFIRMATION - naming or confirming the underlying AI
+ * vendor/model ("yes, it's OpenAI/GPT/ChatGPT/Claude/Anthropic/Gemini/Llama")
+ * even though the prompt has a standing "never confirm or deny" rule. If the
+ * model's reply confirms or names one, replace the whole reply with the
+ * canonical non-committal line instead of trying to patch just the sentence -
+ * a half-scrubbed reply reads more suspicious than a clean substitute.
+ */
+const VENDOR_RE =
+  /\b(openai|chatgpt|gpt-?\d|anthropic|claude|gemini|llama|mistral)\b/i;
+const VENDOR_FALLBACK =
+  "this is build3's own connector layer built around an AI model; the plumbing can change, so we won't pin a name on it.";
+
+// Gate: only ever scrub a vendor mention in the REPLY when the user's OWN
+// message this turn was actually probing for it. Without this gate, VENDOR_RE
+// alone would misfire on a founder's own startup legitimately named "Gemini"
+// or "Claude" (a real first name) mentioned in an ordinary profile answer -
+// the directory has a real "AI & Data" sector where that collision is
+// plausible. Scoping to "only when the user asked" makes that collision need
+// the SAME turn to also be a vendor probe, which is vanishingly rare.
+const VENDOR_PROBE_RE =
+  /\b(openai|chatgpt|gpt-?\d|anthropic|claude|gemini|llama|mistral|which\s+model|what\s+model|powered\s+by|built\s+on|running\s+on)\b/i;
+
+function isVendorProbe(text) {
+  return VENDOR_PROBE_RE.test(String(text || ''));
+}
+
+function scrubVendorConfirmation(text, userProbedVendor) {
+  const s = String(text || '');
+  return userProbedVendor && VENDOR_RE.test(s) ? VENDOR_FALLBACK : text;
+}
+
+/**
+ * (2) FABRICATED COMMUNITY STATS - inventing a specific headcount ("we have
+ * 385 founders", "build3 has over 1200 members") that did not come from any
+ * tool result this turn. Narrowly scoped to TOTAL-COMMUNITY-SIZE phrasing
+ * only (never "found 12 founders in Bangalore", which is a real search
+ * result, not an invented aggregate) so a legitimately-sourced count from
+ * search_founders/find_cofounders is never falsely flagged.
+ */
+const FABRICATED_STAT_RE =
+  /\b(we|build3|the community)\s+(?:have|has)\s+(?:about|around|over|nearly|more than)?\s*\d[\d,]*\+?\s+(founders?|members?|mentors?|entrepreneurs?|startups?)\b|\bthere\s+are\s+(?:about|around|over|nearly|more than)?\s*\d[\d,]*\+?\s+(founders?|members?|mentors?|entrepreneurs?|startups?)\s+(?:in\s+(?:the\s+)?(community|build3|directory))\b/i;
+const FABRICATED_STAT_FALLBACK =
+  "honestly we don't have an exact headcount to quote - happy to search a specific sector, city, or skill for you instead.";
+
+/**
+ * @param {string} text - the model's proposed reply
+ * @param {string} toolResultsJson - every tool result returned THIS turn,
+ *   concatenated/stringified, so a genuinely tool-sourced number is never scrubbed.
+ */
+function scrubFabricatedStats(text, toolResultsJson) {
+  const s = String(text || '');
+  const m = FABRICATED_STAT_RE.exec(s);
+  if (!m) return text;
+  const num = (s.slice(m.index, m.index + m[0].length).match(/\d[\d,]*/) || [])[0];
+  if (num && String(toolResultsJson || '').includes(num)) return text; // genuinely sourced this turn
+  return FABRICATED_STAT_FALLBACK;
+}
+
+/**
  * The last question-shaped sentence in a reply, or null. Used to persist
  * "what did we just ask them" (see handler.js draft.pending_question /
  * engine.js's PENDING QUESTION note) so a bare "yes"/"no" next turn can be
@@ -129,4 +194,7 @@ module.exports = {
   scrubUnverifiedUrls,
   extractUrls,
   extractLastQuestion,
+  scrubVendorConfirmation,
+  isVendorProbe,
+  scrubFabricatedStats,
 };
