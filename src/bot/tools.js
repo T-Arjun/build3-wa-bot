@@ -9,6 +9,7 @@ const { SECTORS, STARTUP_STAGES, LOOKING_FOR } = require('../domain/enums');
 const { AREA_KEYS, areaLabel } = require('../domain/mentorAreas');
 const { CATEGORY_KEYS, categoryLabel } = require('../domain/perkCategories');
 const { editDistance } = require('../domain/geo');
+const { isHedgedSelfClaim, cityIsSelf } = require('./intent');
 
 const TOO_BROAD = 50;
 
@@ -21,29 +22,9 @@ const TOO_BROAD = 50;
 // own uncertainty (same doctrine as widenedSearchDisclosure not trusting the
 // model to disclose a dropped filter) - so this checks the RAW user text
 // directly, independent of whatever confident label the model chose.
-const HEDGE_RE =
-  /\b(a\s+little|little\s+bit|somewhat|some(what)?|not\s+(fully|totally|really|that)|kind\s+of|sort\s+of|part[\s-]?time|mixed|bit\s+of)\b/i;
-function isHedgedSelfClaim(rawText) {
-  return HEDGE_RE.test(String(rawText || ''));
-}
-
-// Deterministic backstop (real observed failure, THIRD occurrence of the same
-// mistake through a different phrasing each time - a prompt worked example
-// for "from <city>" didn't generalize to "cofounder(s) in <city>"): a city
-// named right next to "cofounder" describes WHO THEY WANT, not the user, but
-// set_self_profile kept saving it as the user's own city anyway ("find me a
-// tech cofounder in bangalore" -> wrongly saved city:"Bangalore" onto a Goa-
-// based founder, 3/3 reproductions). Checked against the raw text directly,
-// independent of the model's own args, same doctrine as the hedge/negation
-// checks above: a city mention is ONLY the user's own when there's a genuine
-// first-person self-reference; otherwise, right next to "cofounder" with no
-// self-reference, it's almost certainly describing the person they want.
-const COFOUNDER_RE = /\bco-?founders?\b/i;
-const SELF_REF_RE = /\b(i'?m|i\s+am|iam|myself|my\s+own|main\b|mera\b|meri\b|based\s+in|i\s+live|i'?m\s+from)\b/i;
-function isLikelyCofounderCityNotSelf(rawText) {
-  const t = String(rawText || '');
-  return COFOUNDER_RE.test(t) && !SELF_REF_RE.test(t);
-}
+// Self-vs-want resolution (hedged self-claims, and whether a named city belongs
+// to the user or the person they want) lives in ./intent - one tested place,
+// consulted here, instead of ad-hoc regexes patched one phrasing at a time.
 
 /** OpenAI tool (function) definitions exposed to the model. */
 const definitions = [
@@ -543,15 +524,15 @@ const impls = {
     }
     if (args.sector) self.sector = args.sector;
     if (args.city) {
-      if (isLikelyCofounderCityNotSelf(ctx.rawText)) {
-        // "find me a tech cofounder in bangalore" - Bangalore describes the
-        // cofounder being asked for, not the user. Don't overwrite the user's
-        // own (possibly different, already-known) city with it - instead hand
-        // it to a find_cofounders call in this SAME turn that forgot to pass
-        // its own city filter (the other half of this exact live failure).
-        ctx.suspectCofounderCity = args.city;
-      } else {
+      if (cityIsSelf(ctx.rawText, args.city)) {
         self.city = args.city;
+      } else {
+        // The city describes the WANTED cofounder, not the user (e.g. "find me
+        // a tech cofounder in bangalore"). Don't overwrite the user's own
+        // (possibly different, already-known) city - hand it to a
+        // find_cofounders call in this SAME turn that forgot to pass its own
+        // city filter (the other half of this live failure).
+        ctx.suspectCofounderCity = args.city;
       }
     }
     if (args.stage) self.stage = args.stage;
