@@ -216,9 +216,15 @@ async function processEvent(ev) {
       history,
       focus: conv.draft?.focus || null,
       self: conv.draft?.self || null,
-      prevMatchSlugs: isMatchCacheFresh(conv.draft)
-        ? (conv.draft?.match_cache || []).map((m) => m.slug)
-        : [],
+      // Real observed failure this fixes: this used to read draft.match_cache
+      // (which also holds everyone merely SCORED >=floor for a DIFFERENT
+      // earlier search's own pagination, not just what was actually shown as
+      // a card) - so a person who scored well in one search but was never
+      // displayed (only the top 3 are) could vanish entirely from a LATER,
+      // differently-filtered search where they were the top scorer. Use
+      // draft.shown_match_slugs instead: the accumulating set of slugs
+      // ACTUALLY pushed as cards, which is the real "don't repeat" intent.
+      prevMatchSlugs: isMatchCacheFresh(conv.draft) ? conv.draft?.shown_match_slugs || [] : [],
       mentionNote,
       safetyRecent: (conv.draft?.safety_recent || 0) > 0,
       pendingQuestion: conv.draft?.pending_question || null,
@@ -313,6 +319,13 @@ function isMatchCacheFresh(draft) {
   return typeof at === 'number' && Date.now() - at < MATCH_CACHE_TTL_MS;
 }
 
+/** Union new slugs into the accumulating "actually shown as a card" set, capped. */
+function unionShownSlugs(draft, newSlugs) {
+  if (!newSlugs || !newSlugs.length) return draft.shown_match_slugs || [];
+  const prior = Array.isArray(draft.shown_match_slugs) ? draft.shown_match_slugs : [];
+  return Array.from(new Set([...prior, ...newSlugs])).slice(-50);
+}
+
 // Whole-message-only, deliberately narrow (same doctrine as parseOrdinal in
 // ordinal.js): a message that ALSO carries new content ("show all founders in
 // bangalore", "show them all, and priya's profile too") must fall through to
@@ -353,9 +366,15 @@ async function sendAllRemainingMatches(to, conv, baseState) {
     outbox.push({ kind: 'text', body: `and ${cache.length - newOffset} more beyond that, just ask if you want them too.` });
   }
   await sendOutbox(to, outbox);
+  const draftBefore = { ...(conv.draft || {}) };
   await saveConversation(to, {
     ...baseState,
-    draft: { ...(conv.draft || {}), intro_sent: true, match_offset: newOffset },
+    draft: {
+      ...draftBefore,
+      intro_sent: true,
+      match_offset: newOffset,
+      shown_match_slugs: unionShownSlugs(draftBefore, toSend.map((m) => m.slug)),
+    },
   });
 }
 
@@ -377,6 +396,12 @@ function persistDraft(conv, state, sendsOk = true, replyText = null) {
     draft.match_cache = state.match_cache;
     draft.match_offset = MATCH_PAGE;
     draft.match_cache_at = Date.now();
+  }
+  // Accumulating set of slugs ACTUALLY shown as match cards (see the
+  // prevMatchSlugs comment above) - unioned across turns, not replaced, so a
+  // later differently-filtered search still knows who's already been shown.
+  if (state.shown_match_slugs && state.shown_match_slugs.length) {
+    draft.shown_match_slugs = unionShownSlugs(draft, state.shown_match_slugs);
   }
   if (state.focus && sendsOk) {
     // New profile viewed this turn AND its card actually sent - update FOCUS and
@@ -496,9 +521,14 @@ async function routeReply(ev, to, conv, baseState) {
       });
     }
     await sendOutbox(to, outbox);
+    const draftAfterMore = { ...(conv.draft || {}) };
     await saveConversation(to, {
       ...baseState,
-      draft: { ...(conv.draft || {}), match_offset: newOffset },
+      draft: {
+        ...draftAfterMore,
+        match_offset: newOffset,
+        shown_match_slugs: unionShownSlugs(draftAfterMore, next.map((m) => m.slug)),
+      },
     });
     return true;
   }

@@ -449,9 +449,18 @@ const impls = {
     if (poolSize === 0 || results.length === 0) {
       return { status: 'too_few', poolSize };
     }
-    // Drop people already surfaced in the previous match set so "find another"
-    // doesn't re-paste identical cards. If everyone matching was already shown,
-    // say so (no cards) instead of repeating them.
+    // Drop people ACTUALLY SHOWN as cards in a previous turn so "find another"
+    // doesn't re-paste identical cards. ctx.prevMatchSlugs (see handler.js) is
+    // built from draft.shown_match_slugs, an accumulating set of slugs that
+    // were genuinely pushed as image cards - NOT draft.match_cache, which also
+    // holds everyone merely scored >=floor for a DIFFERENT earlier search's
+    // pagination (see the match_cache assignment below). Real observed
+    // failure from conflating the two: a person who scored 65 in a broad
+    // "sales cofounders" search (held in that search's match_cache for
+    // "more:matches" pagination, but never actually shown - only the top 3
+    // were) then vanished entirely from a LATER, narrower "sales cofounder in
+    // Delhi" search where they were the #1 scorer, because their slug was
+    // still sitting in the stale match_cache from the unrelated broad search.
     const prevShown = new Set(ctx.prevMatchSlugs || []);
     const freshAll = results.filter((m) => !prevShown.has(m.slug));
     if (freshAll.length === 0) {
@@ -479,10 +488,17 @@ const impls = {
     for (const m of top) {
       ctx.outbox.push({ kind: 'image', url: fmt.avatarFor(m), caption: fmt.matchCaption(m) });
     }
-    // Record everyone in this fresh set as shown (for pagination + next-turn
-    // exclusion), even if only the top 3 are on screen now.
+    // Record everyone in this fresh set for THIS search's own pagination
+    // ("more:matches"/"show them all" page through the rest of `fresh`), even
+    // though only the top 3 are on screen now. This is deliberately broader
+    // than "shown" - see shown_match_slugs below for the actually-displayed set.
     ctx.state.last_results = fresh.map((m) => m.slug);
     ctx.state.match_cache = fresh;
+    // The slugs ACTUALLY pushed as cards this turn - this, not match_cache, is
+    // what the NEXT (possibly differently-filtered) find_cofounders call should
+    // treat as "already shown, don't repeat" (see prevShown above and
+    // handler.js's draft.shown_match_slugs).
+    ctx.state.shown_match_slugs = top.map((m) => m.slug);
     if (fresh.length > 3) {
       ctx.outbox.push({
         kind: 'buttons',
