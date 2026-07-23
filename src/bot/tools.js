@@ -27,6 +27,24 @@ function isHedgedSelfClaim(rawText) {
   return HEDGE_RE.test(String(rawText || ''));
 }
 
+// Deterministic backstop (real observed failure, THIRD occurrence of the same
+// mistake through a different phrasing each time - a prompt worked example
+// for "from <city>" didn't generalize to "cofounder(s) in <city>"): a city
+// named right next to "cofounder" describes WHO THEY WANT, not the user, but
+// set_self_profile kept saving it as the user's own city anyway ("find me a
+// tech cofounder in bangalore" -> wrongly saved city:"Bangalore" onto a Goa-
+// based founder, 3/3 reproductions). Checked against the raw text directly,
+// independent of the model's own args, same doctrine as the hedge/negation
+// checks above: a city mention is ONLY the user's own when there's a genuine
+// first-person self-reference; otherwise, right next to "cofounder" with no
+// self-reference, it's almost certainly describing the person they want.
+const COFOUNDER_RE = /\bco-?founders?\b/i;
+const SELF_REF_RE = /\b(i'?m|i\s+am|iam|myself|my\s+own|main\b|mera\b|meri\b|based\s+in|i\s+live|i'?m\s+from)\b/i;
+function isLikelyCofounderCityNotSelf(rawText) {
+  const t = String(rawText || '');
+  return COFOUNDER_RE.test(t) && !SELF_REF_RE.test(t);
+}
+
 /** OpenAI tool (function) definitions exposed to the model. */
 const definitions = [
   {
@@ -403,6 +421,12 @@ const impls = {
 
   async find_cofounders(args, ctx) {
     const filters = toFilters(args);
+    // Recover a city the model mentioned but misfiled onto set_self_profile
+    // instead of passing here (see isLikelyCofounderCityNotSelf above) - same
+    // turn, same shared ctx, so if set_self_profile ran first (the observed
+    // order) its extracted city is sitting right here waiting to be used
+    // instead of silently vanishing.
+    if (!filters.city && ctx.suspectCofounderCity) filters.city = ctx.suspectCofounderCity;
     // No hard "need criteria" gate - a broad search returns sensible results
     // regardless of who's explicitly marked themselves as cofounder-seeking
     // (looking_for is never a pool gate - see cofounderCandidates). The engine
@@ -501,7 +525,18 @@ const impls = {
       self.skillConfidence = isHedgedSelfClaim(ctx.rawText) ? 'soft' : 'firm';
     }
     if (args.sector) self.sector = args.sector;
-    if (args.city) self.city = args.city;
+    if (args.city) {
+      if (isLikelyCofounderCityNotSelf(ctx.rawText)) {
+        // "find me a tech cofounder in bangalore" - Bangalore describes the
+        // cofounder being asked for, not the user. Don't overwrite the user's
+        // own (possibly different, already-known) city with it - instead hand
+        // it to a find_cofounders call in this SAME turn that forgot to pass
+        // its own city filter (the other half of this exact live failure).
+        ctx.suspectCofounderCity = args.city;
+      } else {
+        self.city = args.city;
+      }
+    }
     if (args.stage) self.stage = args.stage;
     if (args.role) self.role = args.role;
     ctx.self = self; // a find_cofounders call in this SAME turn picks it up
