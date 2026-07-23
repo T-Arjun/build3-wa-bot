@@ -45,6 +45,16 @@ async function run(input) {
   let identity;
   if (ctx.requesterSlug) {
     identity = `The user is a known founder${ctx.requesterName ? ` named ${ctx.requesterName}` : ''} (slug: ${ctx.requesterSlug}).`;
+    // Real observed failure: a reset conversation (empty history) for a
+    // KNOWN founder got greeted by name with no intro at all ("hey arjun,
+    // hellooooooo back!") - the model let "known founder" silently override
+    // the FIRST CONTACT rule, which is keyed on empty history alone. Knowing
+    // their name doesn't mean they've heard the intro in THIS conversation;
+    // say so explicitly instead of leaving the two signals to conflict.
+    if (history.length === 0) {
+      identity +=
+        ' This conversation\'s history is EMPTY - they have seen no messages from you yet in this thread (a fresh chat, or their history was reset). Knowing their name does NOT mean the FIRST CONTACT intro can be skipped: it still applies in full, just with their name woven in naturally ("hi Arjun, this is build3 bot...").';
+    }
   } else if (ctx.nameConfirmed) {
     identity = `The user is not yet linked to a founder profile. They told us their name is ${ctx.requesterName} - use it naturally.`;
   } else {
