@@ -472,14 +472,25 @@ const impls = {
     // doesn't re-paste identical cards. If everyone matching was already shown,
     // say so (no cards) instead of repeating them.
     const prevShown = new Set(ctx.prevMatchSlugs || []);
-    const fresh = results.filter((m) => !prevShown.has(m.slug));
-    if (fresh.length === 0) {
+    const freshAll = results.filter((m) => !prevShown.has(m.slug));
+    if (freshAll.length === 0) {
       return {
         status: 'no_new_matches',
         total: results.length,
         note: "Everyone matching these EXACT criteria was already shown. Do NOT dead-end and do NOT re-send their cards. Offer to WIDEN the pool (a nearby city, open-to-remote, or an adjacent sector) while KEEPING the core skill/role they asked for. Never suggest switching to a different core skill.",
       };
     }
+    // Never present a genuinely WEAK candidate as a "match" - a card labelled
+    // "· 20/100 match" actively destroys trust in the whole matching product
+    // (real observed failure: 20/100 and 30/100 cards shipped as "matches").
+    // Drop anything below the floor (the "limited overlap"/"mismatch" bands);
+    // results are already sorted best-first. If EVERYONE is weak, show only the
+    // single best and flag it so the reply is honest ("closest i found, not a
+    // strong fit") rather than padding the screen with poor cards.
+    const MATCH_FLOOR = 40;
+    const strong = freshAll.filter((m) => (m.score ?? 0) >= MATCH_FLOOR);
+    const weakOnly = strong.length === 0;
+    const fresh = weakOnly ? freshAll.slice(0, 1) : strong;
     if (dropped.length) {
       ctx.outbox.push({ kind: 'text', body: widenedSearchDisclosure(dropped, filters) });
     }
@@ -498,9 +509,13 @@ const impls = {
         buttons: [{ id: 'more:matches', title: 'More matches' }],
       });
     }
+    const weakNote = weakOnly
+      ? 'This is NOT a strong match - it is the closest person available and everyone else scored too low to show. Say so honestly in your lead-in ("no strong fit for that exact ask, but the closest is...") instead of overselling it. '
+      : '';
     return {
       status: 'ok',
       widened: dropped.length ? dropped : undefined,
+      weakOnly: weakOnly || undefined,
       shown: top.length,
       total: fresh.length,
       tooFew: fresh.length < 3,
@@ -508,9 +523,11 @@ const impls = {
       // message the CODE already sent (see widenedSearchDisclosure above) -
       // this note only needs to stop the model from re-describing the result
       // as matching the dropped criterion in its own lead-in line.
-      note: dropped.length
-        ? `The disclosure above ALREADY told them this widened past ${dropped.join('/')} - do not also claim the results match ${dropped.join(' or ')} in your reply. ${MATCH_SHOWN_NOTE}`
-        : MATCH_SHOWN_NOTE,
+      note:
+        weakNote +
+        (dropped.length
+          ? `The disclosure above ALREADY told them this widened past ${dropped.join('/')} - do not also claim the results match ${dropped.join(' or ')} in your reply. ${MATCH_SHOWN_NOTE}`
+          : MATCH_SHOWN_NOTE),
     };
   },
 
