@@ -100,6 +100,21 @@ async function run(input) {
         'REMINDER (overrides the transcript above): if any earlier reply of yours brushed off a general question, sounded scripted, or drifted from the rules, do NOT imitate it. Follow the system rules fresh each turn: answer general questions plainly, react like a person first.',
     });
   }
+  // Deterministic backstop (real observed failure): "No show those profile
+  // again" / "no show again" is a NEGATION - the user is refusing a repeat,
+  // not asking for one - but the model read it as the literal opposite twice
+  // in a row ("they're right above, tap any card") for the same user intent,
+  // then flip-flopped to "you've seen them all" on the identical follow-up.
+  // Don't trust the model to parse this negation unaided; flag it explicitly.
+  if (/\b(no|don'?t|dont|stop)\b[^.!?]{0,30}\b(show|shw|send)(ing)?\b[^.!?]{0,30}\bagain\b/i.test(
+    input.text || '',
+  )) {
+    messages.push({
+      role: 'system',
+      content:
+        'NEGATION NOTE: the user\'s message is a NEGATION ("no, don\'t show X again") - they are refusing a repeat, NOT asking to see the same thing again. Do not respond as if they asked to re-view what\'s already on screen. If the pool is genuinely exhausted, say so plainly and consistently (offer to widen); if there are unseen candidates, show those instead. Never reply "they\'re right above, tap a card" to a message that says NOT to show it again.',
+    });
+  }
   if (input.safetyRecent) {
     // Sticky safety register: set for a couple of turns after the self-harm
     // guard fired (handler owns the counter). Keeps the tone gentle without

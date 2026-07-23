@@ -19,6 +19,14 @@ const wa = require('../whatsapp/cloudApi');
 const log = require('../lib/logger');
 
 const MATCH_PAGE = 3;
+// "Already seen this pool" only makes sense within one active session - past
+// this, it reads as the bot falsely claiming a brand-new-feeling ask is
+// exhausted (real observed failure: a fresh "find me a sales cofounder in
+// delhi" came back "you've seen them all" purely because match_cache from an
+// unrelated earlier session, hours/days prior, never got cleared by anything
+// in between - mentors/perks/other topics don't touch it). Missing timestamp
+// (data saved before this fix existed) is treated as stale, not fresh-forever.
+const MATCH_CACHE_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Thin logging wrappers around the two real send paths (wa.sendText directly,
@@ -197,7 +205,9 @@ async function processEvent(ev) {
       history,
       focus: conv.draft?.focus || null,
       self: conv.draft?.self || null,
-      prevMatchSlugs: (conv.draft?.match_cache || []).map((m) => m.slug),
+      prevMatchSlugs: isMatchCacheFresh(conv.draft)
+        ? (conv.draft?.match_cache || []).map((m) => m.slug)
+        : [],
       mentionNote,
       safetyRecent: (conv.draft?.safety_recent || 0) > 0,
     });
@@ -284,6 +294,13 @@ async function buildEntityGrounding(text, conv) {
   }
 }
 
+/** See MATCH_CACHE_TTL_MS - stale "already shown" state should never block a
+ * fresh-feeling ask. No timestamp (pre-fix data) counts as stale. */
+function isMatchCacheFresh(draft) {
+  const at = draft?.match_cache_at;
+  return typeof at === 'number' && Date.now() - at < MATCH_CACHE_TTL_MS;
+}
+
 function persistDraft(conv, state, sendsOk = true) {
   const draft = { ...(conv.draft || {}) };
   draft.intro_sent = true; // disclaimer shown once per conversation
@@ -293,6 +310,7 @@ function persistDraft(conv, state, sendsOk = true) {
   if (state.match_cache) {
     draft.match_cache = state.match_cache;
     draft.match_offset = MATCH_PAGE;
+    draft.match_cache_at = Date.now();
   }
   if (state.focus && sendsOk) {
     // New profile viewed this turn AND its card actually sent - update FOCUS and
