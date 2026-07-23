@@ -3,6 +3,7 @@
 const { supabase } = require('../config/supabase');
 const { MENTORS } = require('./mentors.data');
 const { AREA_KEYS, areaLabel } = require('./mentorAreas');
+const { editDistance } = require('./geo');
 const log = require('../lib/logger');
 
 /**

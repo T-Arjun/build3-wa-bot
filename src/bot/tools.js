@@ -8,6 +8,7 @@ const fmt = require('./format');
 const { SECTORS, STARTUP_STAGES, LOOKING_FOR } = require('../domain/enums');
 const { AREA_KEYS, areaLabel } = require('../domain/mentorAreas');
 const { CATEGORY_KEYS, categoryLabel } = require('../domain/perkCategories');
+const { editDistance } = require('../domain/geo');
 
 const TOO_BROAD = 50;
 
@@ -613,7 +614,24 @@ async function mentorByName(name) {
   const hits = (await mentors.searchByExpertise(nameLc)).filter((s) =>
     s.name.toLowerCase().includes(firstToken),
   );
-  return hits.length === 1 ? hits[0] : null;
+  if (hits.length === 1) return hits[0];
+  if (hits.length > 1) return null;
+  // Nothing by exact substring: try a typo-tolerant pass, same doctrine as
+  // founders.js's fuzzyByName ("umaier" -> "Umair Tariq") - real observed
+  // failure: "ayushman" (one letter short) found nothing for the real mentor
+  // "Ayushmaan Kapoor". Mentors are a small, fixed roster (a dozen-ish, not
+  // hundreds like founders), so unlike founders' fuzzy pass this only
+  // auto-resolves when there's exactly ONE candidate within a small edit
+  // distance - with so few mentors, one unique near-match is reliably the
+  // right person, not a coincidental collision worth a "did you mean?" step.
+  if (firstToken.length < 4) return null;
+  const maxD = firstToken.length > 6 ? 2 : 1;
+  const all = await mentors.listAll();
+  const near = all.filter((s) => {
+    const words = s.name.toLowerCase().split(/\s+/).filter(Boolean);
+    return words.some((w) => Math.abs(w.length - firstToken.length) <= maxD && editDistance(firstToken, w) <= maxD);
+  });
+  return near.length === 1 ? near[0] : null;
 }
 
 function pushProfile(ctx, f) {
