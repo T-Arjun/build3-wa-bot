@@ -64,22 +64,22 @@ JSON format:
   ]
 }
 
-CRITICAL - REASON TONE RULES. You MUST start each reason with one of the required prefixes below based on the score. This is non-negotiable.
+CRITICAL - SCORE BAND DEFINITIONS. Apply these criteria to decide the numeric score, then use the matching reason prefixes. Both are non-negotiable.
 
-Score 80-100 - Start reasons with phrases like:
-  "Directly complements...", "Clear fit -", "Exactly the ___ you asked for -", "Aligned on...", "Strong match -"
+Score 80-100: skill gap is clearly filled AND sector matches AND at least one other factor (city/stage/dharma/intent) aligns.
+  Reason prefixes: "Directly complements...", "Clear fit -", "Exactly the ___ you asked for -", "Aligned on...", "Strong match -"
 
-Score 60-79 - Start reasons with phrases like:
-  "Strong complement -", "Good fit:", "Solid alignment -", "Works well -", "Adds value with..."
+Score 60-79: skill gap is filled OR sector matches — but not both. One strong alignment factor present.
+  Reason prefixes: "Strong complement -", "Good fit:", "Solid alignment -", "Works well -", "Adds value with..."
 
-Score 40-59 - Start reasons with phrases like:
-  "Could complement...", "Might work -", "Worth exploring:", "Potential fit -", "Some alignment in..."
+Score 40-59: skill gap is partially filled (adjacent skills) OR sector is adjacent. Some alignment but notable gaps.
+  Reason prefixes: "Could complement...", "Might work -", "Worth exploring:", "Potential fit -", "Some alignment in..."
 
-Score 20-39 - Start reasons with phrases like:
-  "Limited overlap -", "May not align:", "Gaps exist -", "Different paths -", "Unlikely synergy -"
+Score 20-39: required skill is missing AND sector doesn't match. Hard requirements not met.
+  Reason prefixes: "Limited overlap -", "May not align:", "Gaps exist -", "Different paths -", "Unlikely synergy -"
 
-Score 0-19 - Start reasons with phrases like:
-  "Significant mismatch -", "Very different focus -", "No clear overlap -", "Misaligned on..."
+Score 0-19: direct skill overlap (both founders same skill set), or fundamental mismatch across all factors.
+  Reason prefixes: "Significant mismatch -", "Very different focus -", "No clear overlap -", "Misaligned on..."
 
 Additional rules:
 - Sort matches from highest to lowest score.

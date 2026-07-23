@@ -179,6 +179,47 @@ function parseMatchResults(parsed, candidates) {
 }
 
 /**
+ * Hard-filter candidates against explicit search constraints BEFORE the LLM
+ * scores them. The LLM does soft complementarity scoring; hard requirements
+ * (skill present, sector match) should never be left to the model's judgment
+ * because it is inconsistent — "want a tech cofounder" produces different
+ * candidate sets across runs when the filtering is implicit.
+ *
+ * Conservative: only drops a candidate when we are CERTAIN it doesn't qualify.
+ * When the candidate's relevant field is missing/null, we leave them in (benefit
+ * of the doubt) rather than wrongly excluding someone who just has an incomplete
+ * profile.
+ */
+function hardFilter(candidates, filters) {
+  let pool = candidates;
+
+  // Skills: if the search explicitly names required skills, drop candidates who
+  // have NO skills field entry that overlaps (substring match, case-insensitive).
+  // A candidate with an empty skills array stays in — their profile may just be
+  // incomplete. The LLM still scores them lower for missing the requirement.
+  if (filters.skills && filters.skills.length) {
+    const wanted = filters.skills.map((s) => s.toLowerCase());
+    pool = pool.filter((f) => {
+      const has = (f.skills || []).map((s) => s.toLowerCase());
+      if (has.length === 0) return true; // incomplete profile — keep, let LLM decide
+      return wanted.some((w) => has.some((h) => h.includes(w) || w.includes(h)));
+    });
+  }
+
+  // Sector: if the search names a sector, drop candidates in a clearly different
+  // sector. Null sector on the candidate → keep (incomplete profile).
+  if (filters.sector) {
+    const wantedSector = filters.sector.toLowerCase();
+    pool = pool.filter((f) => {
+      if (!f.sector) return true; // incomplete — keep
+      return f.sector.toLowerCase() === wantedSector;
+    });
+  }
+
+  return pool;
+}
+
+/**
  * Constraint-aware cofounder matching.
  * @param {object} filters {sector,city,cohort,stage,skills[]}
  * @param {string|null} requesterSlug
@@ -200,14 +241,22 @@ async function findCofounders(filters = {}, requesterSlug = null, self = null) {
   // gate here (see cofounderCandidates' own doc comment) - it only shapes the
   // per-result lookingForStatus line, never who's scored and shown.
   const candidates = await cofounderCandidates(filters, requesterSlug, 40);
+  // Hard-filter before LLM scoring: drop candidates that definitively don't
+  // meet explicit skill/sector constraints. This prevents score volatility from
+  // the model "inferring" that an edtech person belongs in a fintech search.
+  const qualified = hardFilter(candidates, filters);
+  // Log the drop so we can monitor whether the filter is too aggressive.
+  if (qualified.length < candidates.length) {
+    log.info(`hardFilter: ${candidates.length} → ${qualified.length} candidates (filters: skills=${JSON.stringify(filters.skills)}, sector=${filters.sector})`);
+  }
 
-  if (candidates.length === 0) {
+  if (qualified.length === 0) {
     return { results: [], poolSize: 0, cached: false, tooFew: true };
   }
 
   const target = buildTarget(requester, filters, effectiveSelf);
   const system = buildSystemPrompt();
-  const user = buildUserPrompt(target, candidates, filters.skills);
+  const user = buildUserPrompt(target, qualified, filters.skills);
 
   let parsed;
   try {
@@ -247,7 +296,7 @@ async function findCofounders(filters = {}, requesterSlug = null, self = null) {
     throw err;
   }
 
-  const results = parseMatchResults(parsed, candidates);
+  const results = parseMatchResults(parsed, qualified);
 
   await writeCache(requesterSlug, sig, results);
 
