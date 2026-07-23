@@ -107,4 +107,26 @@ function extractUrls(s) {
   return String(s || '').match(URL_RE) || [];
 }
 
-module.exports = { untrackedNote, selfHarmResponse, scrubUnverifiedUrls, extractUrls };
+/**
+ * The last question-shaped sentence in a reply, or null. Used to persist
+ * "what did we just ask them" (see handler.js draft.pending_question /
+ * engine.js's PENDING QUESTION note) so a bare "yes"/"no" next turn can be
+ * pinned to the actual question instead of the model re-guessing which of
+ * several possible open threads it answers.
+ */
+function extractLastQuestion(text) {
+  const sentences = String(text || '')
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const questions = sentences.filter((s) => s.endsWith('?'));
+  return questions.length ? questions[questions.length - 1] : null;
+}
+
+module.exports = {
+  untrackedNote,
+  selfHarmResponse,
+  scrubUnverifiedUrls,
+  extractUrls,
+  extractLastQuestion,
+};

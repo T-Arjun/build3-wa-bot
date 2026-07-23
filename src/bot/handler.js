@@ -12,7 +12,7 @@ const { resolveTypedSelection } = require('./ordinal');
 const { pushProfile, pushMentorCard, pushPerkCard } = require('./tools');
 const { areaLabel } = require('../domain/mentorAreas');
 const { categoryLabel } = require('../domain/perkCategories');
-const { untrackedNote, selfHarmResponse } = require('./guards');
+const { untrackedNote, selfHarmResponse, extractLastQuestion } = require('./guards');
 const { buildMentionNote, findMentions } = require('./mentions');
 const fmt = require('./format');
 const wa = require('../whatsapp/cloudApi');
@@ -190,6 +190,17 @@ async function processEvent(ev) {
     if (handled) return;
   }
 
+  // 1.6) "show them all" / "see everyone" over a cached match list - deterministic,
+  // pre-LLM (real observed ambiguity: this phrase could be misread by the model as
+  // "show full profiles of everyone", spawning a per-person disambiguation loop,
+  // instead of the obvious intent - paginate in the rest of the SAME match list
+  // already on screen). Only fires on a bare generic phrase with a remaining cache;
+  // any message with its own extra content (a name, a new filter) falls through.
+  if (ev.text && !ev.replyId && Array.isArray(conv.draft?.match_cache) && conv.draft.match_cache.length && isShowAllRequest(ev.text)) {
+    await sendAllRemainingMatches(to, conv, baseState);
+    return;
+  }
+
   // 2) Conversational turn. (No standalone beta-disclaimer bubble: Bo greets
   // warmly on first contact per the system prompt, and the beta note rides as the
   // footer on interactive messages, so we don't lead with a scripted liability line.)
@@ -210,6 +221,7 @@ async function processEvent(ev) {
         : [],
       mentionNote,
       safetyRecent: (conv.draft?.safety_recent || 0) > 0,
+      pendingQuestion: conv.draft?.pending_question || null,
     });
 
     // Honesty backstop: if they tried to filter by an untracked attribute
@@ -237,7 +249,7 @@ async function processEvent(ev) {
       ...baseState,
       last_results: state.last_results || conv.last_results || [],
       history: newHistory,
-      draft: persistDraft(conv, state, allSent),
+      draft: persistDraft(conv, state, allSent, outText),
     });
   } catch (err) {
     log.error('handleEvent engine error:', err.message);
@@ -301,9 +313,63 @@ function isMatchCacheFresh(draft) {
   return typeof at === 'number' && Date.now() - at < MATCH_CACHE_TTL_MS;
 }
 
-function persistDraft(conv, state, sendsOk = true) {
+// Whole-message-only, deliberately narrow (same doctrine as parseOrdinal in
+// ordinal.js): a message that ALSO carries new content ("show all founders in
+// bangalore", "show them all, and priya's profile too") must fall through to
+// the LLM, not get swallowed here.
+const SHOW_ALL_PHRASES = new Set([
+  'all', 'everyone', 'everybody', 'show all', 'see all', 'list all',
+  'show everyone', 'see everyone', 'list everyone', 'show everybody',
+  'see everybody', 'show them all', 'see them all', 'list them all',
+  'show me all', 'show me everyone', 'show all of them', 'see all of them',
+  'all of them', 'yes show all', 'yes all', 'all of them please',
+]);
+
+function isShowAllRequest(text) {
+  const s = String(text || '').trim().toLowerCase().replace(/[.!?]+$/, '');
+  return SHOW_ALL_PHRASES.has(s);
+}
+
+/**
+ * Deterministic pagination for "show them all" / "see everyone" over the
+ * cached match list (real observed ambiguity, see the 1.6 call site). Mirrors
+ * the 'more:matches' interactive-button logic but sends the FULL remainder in
+ * one go (capped, so one request can't blast dozens of cards) instead of one
+ * MATCH_PAGE-sized page at a time - the user explicitly asked for all of them.
+ */
+const SHOW_ALL_CAP = 15;
+async function sendAllRemainingMatches(to, conv, baseState) {
+  const cache = conv.draft?.match_cache || [];
+  const offset = conv.draft?.match_offset || MATCH_PAGE;
+  const remaining = cache.slice(offset);
+  if (remaining.length === 0) {
+    await sendText(to, "that's everyone i found. want to try different criteria?");
+    return;
+  }
+  const toSend = remaining.slice(0, SHOW_ALL_CAP);
+  const outbox = toSend.map((m) => ({ kind: 'image', url: fmt.avatarFor(m), caption: fmt.matchCaption(m) }));
+  const newOffset = offset + toSend.length;
+  if (cache.length > newOffset) {
+    outbox.push({ kind: 'text', body: `and ${cache.length - newOffset} more beyond that, just ask if you want them too.` });
+  }
+  await sendOutbox(to, outbox);
+  await saveConversation(to, {
+    ...baseState,
+    draft: { ...(conv.draft || {}), intro_sent: true, match_offset: newOffset },
+  });
+}
+
+function persistDraft(conv, state, sendsOk = true, replyText = null) {
   const draft = { ...(conv.draft || {}) };
   draft.intro_sent = true; // disclaimer shown once per conversation
+  // Remember the last question WE asked (see engine.js's PENDING QUESTION
+  // note) so a bare "yes"/"no" next turn can be pinned to it deterministically
+  // instead of the model re-guessing which open thread it answers. Always
+  // overwritten to whatever this reply actually asked (or cleared if this
+  // reply asked nothing) - it only ever reflects the SINGLE most recent question.
+  const question = extractLastQuestion(replyText);
+  if (question) draft.pending_question = question;
+  else delete draft.pending_question;
   // The user's own background persists for the whole session (survives topic
   // changes) so every later cofounder match stays personalized to them.
   if (state.self) draft.self = state.self;
@@ -361,6 +427,7 @@ async function routeTypedSelection(ev, to, conv, baseState) {
 
   const hist = Array.isArray(conv.history) ? conv.history : [];
   const draft = { ...(conv.draft || {}), intro_sent: true };
+    delete draft.pending_question; // an interactive tap resolves/supersedes any pending text question
   if (sel.sendFailed) {
     await sendText(to, "sorry, couldn't load that profile just now. try again?");
   } else {
@@ -388,6 +455,7 @@ async function routeReply(ev, to, conv, baseState) {
     const f = await founders.getBySlug(slug);
     const hist = Array.isArray(conv.history) ? conv.history : [];
     const draft = { ...(conv.draft || {}) };
+    delete draft.pending_question; // an interactive tap resolves/supersedes any pending text question
     if (f) {
       const ctx = { outbox: [] };
       pushProfile(ctx, f);
@@ -440,6 +508,7 @@ async function routeReply(ev, to, conv, baseState) {
     const key = id.slice('area:'.length);
     const list = await mentors.listByArea(key);
     const draft = { ...(conv.draft || {}), intro_sent: true };
+    delete draft.pending_question; // an interactive tap resolves/supersedes any pending text question
     if (!list.length) {
       await sendText(to, 'no mentors in that area right now. try another?');
     } else {
@@ -462,6 +531,7 @@ async function routeReply(ev, to, conv, baseState) {
     const slug = id.slice('mentor:'.length);
     const s = await mentors.getBySlug(slug);
     const draft = { ...(conv.draft || {}), intro_sent: true };
+    delete draft.pending_question; // an interactive tap resolves/supersedes any pending text question
     if (s) {
       const ctx = { outbox: [], state: {} };
       pushMentorCard(ctx, s);
@@ -495,6 +565,7 @@ async function routeReply(ev, to, conv, baseState) {
     const key = id.slice('perkcat:'.length);
     const list = await perks.listByCategory(key);
     const draft = { ...(conv.draft || {}), intro_sent: true };
+    delete draft.pending_question; // an interactive tap resolves/supersedes any pending text question
     if (!list.length) {
       await sendText(to, 'no perks in that category right now. try another?');
     } else {
@@ -517,6 +588,7 @@ async function routeReply(ev, to, conv, baseState) {
     const slug = id.slice('perk:'.length);
     const p = await perks.getBySlug(slug);
     const draft = { ...(conv.draft || {}), intro_sent: true };
+    delete draft.pending_question; // an interactive tap resolves/supersedes any pending text question
     if (p) {
       const ctx = { outbox: [], state: {} };
       pushPerkCard(ctx, p);
@@ -555,6 +627,7 @@ async function routeMentorTypedSelection(ev, to, conv, baseState) {
 
   const hist = Array.isArray(conv.history) ? conv.history : [];
   const draft = { ...(conv.draft || {}), intro_sent: true };
+    delete draft.pending_question; // an interactive tap resolves/supersedes any pending text question
   if (sel.sendFailed) {
     await sendText(to, "sorry, couldn't load that mentor just now. try again?");
   } else {
@@ -589,6 +662,7 @@ async function routePerkTypedSelection(ev, to, conv, baseState) {
 
   const hist = Array.isArray(conv.history) ? conv.history : [];
   const draft = { ...(conv.draft || {}), intro_sent: true };
+    delete draft.pending_question; // an interactive tap resolves/supersedes any pending text question
   if (sel.sendFailed) {
     await sendText(to, "sorry, couldn't load that perk just now. try again?");
   } else {

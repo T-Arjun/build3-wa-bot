@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { wantsCofounder, isHedgedSelfClaim, cityIsSelf } = require('../src/bot/intent');
+const { wantsCofounder, isHedgedSelfClaim, cityIsSelf, isBareYesNo } = require('../src/bot/intent');
 
 test('wantsCofounder detects cofounder asks, not plain founder search', () => {
   assert.equal(wantsCofounder('find me a cofounder in sales'), true);
@@ -63,4 +63,17 @@ test('cityIsSelf: unsure defaults to NOT-self (conservative - never corrupt the 
   assert.equal(cityIsSelf('find me a cofounder in sales from delhi', 'Delhi'), false);
   // normalized city we cannot locate, inside a request -> conservative, not saved
   assert.equal(cityIsSelf('find me a cofounder in bombay', 'Mumbai'), false);
+});
+
+// ─── isBareYesNo (Phase 2 #2: pending-question dialogue state) ────────────
+test('isBareYesNo matches whole-message short affirmations/negations only', () => {
+  for (const s of ['yes', 'Yes.', 'yeah', 'sure', 'ok', 'okay!', 'ya', 'haan', 'go ahead', 'do it', 'no', 'nah', 'nope', 'not now']) {
+    assert.equal(isBareYesNo(s), true, `expected bare yes/no for: "${s}"`);
+  }
+});
+
+test('isBareYesNo does NOT match a message that carries its own new content', () => {
+  for (const s of ['yes, and also find me a mentor', 'no I meant Bangalore not Bengaluru', 'sure thing, but first show me priya', 'yes 2']) {
+    assert.equal(isBareYesNo(s), false, `expected NOT bare for: "${s}"`);
+  }
 });

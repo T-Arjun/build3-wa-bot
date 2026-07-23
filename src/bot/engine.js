@@ -5,6 +5,7 @@ const { env } = require('../config/env');
 const { systemPrompt } = require('./prompts');
 const { definitions, impls } = require('./tools');
 const { scrubUnverifiedUrls, extractUrls } = require('./guards');
+const { isBareYesNo } = require('./intent');
 const log = require('../lib/logger');
 
 const MAX_TURNS = 4;
@@ -123,6 +124,21 @@ async function run(input) {
       role: 'system',
       content:
         'NEGATION NOTE: the user\'s message is a NEGATION ("no, don\'t show X again") - they are refusing a repeat, NOT asking to see the same thing again. Do not respond as if they asked to re-view what\'s already on screen. If the pool is genuinely exhausted, say so plainly and consistently (offer to widen); if there are unseen candidates, show those instead. Never reply "they\'re right above, tap a card" to a message that says NOT to show it again.',
+    });
+  }
+  // Deterministic backstop for the "bare yes/no answers the wrong question"
+  // failure family (real observed failure: a "Yes"/"No"/"Yes" sequence took 4
+  // extra turns to resolve because each short reply got attached to whatever
+  // the model guessed was still "open" from a compressed history, not the
+  // actual last question asked). Only fires when THIS message is nothing but
+  // a bare affirmation/negation (see intent.js) AND we actually tracked a
+  // question last turn (handler.js persists it as draft.pending_question) -
+  // a substantive message doesn't need this, it carries its own content.
+  if (input.pendingQuestion && isBareYesNo(input.text)) {
+    messages.push({
+      role: 'system',
+      content:
+        `PENDING QUESTION: the last thing we asked them was: "${input.pendingQuestion}". Their reply is a bare yes/no with no other content - it is answering THIS question, not some other earlier thread. Resolve and act on it in that exact context (yes = do what was offered/asked there; no = don't, and don't ask the same thing again this conversation).`,
     });
   }
   if (input.safetyRecent) {

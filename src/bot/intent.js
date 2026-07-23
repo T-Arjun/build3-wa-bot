@@ -57,6 +57,27 @@ const HINGLISH_SELF_GOVERNOR_RE = /\b(main|mai|mein\s+rehta|mein\s+rehti)\s*$/i;
 const SELF_LOC_ANYWHERE_RE = /\b(i'?m|i\s+am|iam|i\s+live|i\s+stay)\b[a-z\s]{0,22}?\b(in|from|at)\b/i;
 const HINGLISH_SELF_ANYWHERE_RE = /\b(main|mai)\b[a-z\s]{0,20}?\b(hu|hoon|rehta|rehti|se\s+hu|me\s+hu|mein\s+hu)\b/i;
 
+// A message that is ENTIRELY a short yes/no/affirmation-style reply, nothing
+// else. Deliberately whole-message-anchored (^...$) so a longer message that
+// happens to start with "yes, and also..." does NOT match - that message
+// carries its own new content and doesn't need pending-question grounding.
+const BARE_YESNO_RE =
+  /^(yes|yeah|yep|yup|sure|ok(ay)?|please|go\s*ahead|do\s*it|ya+|haan?|sounds?\s*good|correct|right|why\s*not|no+|nah|nope|not\s*(really|now)|nahi)[.!?]?$/i;
+
+/**
+ * True when the ENTIRE message is a bare yes/no/short-affirmation, with no
+ * other content. Used to decide when a reply is ambiguous enough that it
+ * needs to be pinned to a specific PENDING question (see engine.js) rather
+ * than re-derived from scratch each turn - the model reliably loses track of
+ * which of several possible open questions a bare "yes" answers, especially
+ * across a compressed/summarized history (real observed failure: a user's
+ * "Yes"/"No"/"Yes" sequence took 4 extra turns to resolve because each short
+ * reply got attached to the wrong earlier question).
+ */
+function isBareYesNo(text) {
+  return BARE_YESNO_RE.test(String(text || '').trim());
+}
+
 function escapeRegex(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -107,4 +128,4 @@ function cityIsSelf(text, cityValue) {
   return hasSelfLoc && !isRequest;
 }
 
-module.exports = { wantsCofounder, isHedgedSelfClaim, cityIsSelf };
+module.exports = { wantsCofounder, isHedgedSelfClaim, cityIsSelf, isBareYesNo };
