@@ -232,7 +232,12 @@ async function findCofounders(filters = {}, requesterSlug = null, self = null) {
 
   const cached = await readCache(requesterSlug, sig);
   if (cached) {
-    return { results: cached, poolSize: cached.length, cached: true, tooFew: cached.length < 3 };
+    // noHardMatch isn't persisted in the cache row (would need a migration for
+    // one flag) - on a cache hit it defaults false, which only means the
+    // disclaimer is skipped for a repeat search within the TTL window. It never
+    // means a candidate is hidden; the cached results themselves already went
+    // through the same fallback-not-drop logic when first computed.
+    return { results: cached, poolSize: cached.length, cached: true, tooFew: cached.length < 3, noHardMatch: false };
   }
 
   const requester = requesterSlug ? await getBySlug(requesterSlug) : null;
@@ -241,17 +246,24 @@ async function findCofounders(filters = {}, requesterSlug = null, self = null) {
   // gate here (see cofounderCandidates' own doc comment) - it only shapes the
   // per-result lookingForStatus line, never who's scored and shown.
   const candidates = await cofounderCandidates(filters, requesterSlug, 40);
+  if (candidates.length === 0) {
+    return { results: [], poolSize: 0, cached: false, tooFew: true };
+  }
+
   // Hard-filter before LLM scoring: drop candidates that definitively don't
   // meet explicit skill/sector constraints. This prevents score volatility from
   // the model "inferring" that an edtech person belongs in a fintech search.
-  const qualified = hardFilter(candidates, filters);
+  const strictQualified = hardFilter(candidates, filters);
+  // Never zero out the whole pool. If NOBODY meets the hard requirement, that's
+  // real signal worth telling the user honestly ("nobody with X exactly, here's
+  // the closest") - not a reason to show zero candidates. Fall back to the full
+  // pool and flag it so the caller (tools.js) can attach that disclaimer, same
+  // pattern as the existing weakOnly score-floor fallback.
+  const noHardMatch = strictQualified.length === 0;
+  const qualified = noHardMatch ? candidates : strictQualified;
   // Log the drop so we can monitor whether the filter is too aggressive.
-  if (qualified.length < candidates.length) {
-    log.info(`hardFilter: ${candidates.length} → ${qualified.length} candidates (filters: skills=${JSON.stringify(filters.skills)}, sector=${filters.sector})`);
-  }
-
-  if (qualified.length === 0) {
-    return { results: [], poolSize: 0, cached: false, tooFew: true };
+  if (qualified.length < candidates.length || noHardMatch) {
+    log.info(`hardFilter: ${candidates.length} → ${strictQualified.length} candidates (filters: skills=${JSON.stringify(filters.skills)}, sector=${filters.sector})${noHardMatch ? ' - fell back to full pool' : ''}`);
   }
 
   const target = buildTarget(requester, filters, effectiveSelf);
@@ -300,7 +312,7 @@ async function findCofounders(filters = {}, requesterSlug = null, self = null) {
 
   await writeCache(requesterSlug, sig, results);
 
-  return { results, poolSize: candidates.length, cached: false, tooFew: results.length < 3 };
+  return { results, poolSize: candidates.length, cached: false, tooFew: results.length < 3, noHardMatch };
 }
 
-module.exports = { findCofounders, buildTarget, parseMatchResults, lookingForStatus };
+module.exports = { findCofounders, buildTarget, parseMatchResults, lookingForStatus, hardFilter };

@@ -413,7 +413,7 @@ const impls = {
     // (looking_for is never a pool gate - see cofounderCandidates). The engine
     // clarifies at most once at the conversation layer; once the user wants
     // results, we always show some.
-    let { results, poolSize, tooFew } = await findCofounders(filters, ctx.requesterSlug, ctx.self);
+    let { results, poolSize, tooFew, noHardMatch } = await findCofounders(filters, ctx.requesterSlug, ctx.self);
     let dropped = [];
     // Deterministic backstop (don't rely on the model alone - it has repeated
     // this exact mistake live, MULTIPLE times now: dropping a filter and then
@@ -439,7 +439,7 @@ const impls = {
       for (const { label, ...drop } of attempts) {
         const wider = await findCofounders({ ...filters, ...drop }, ctx.requesterSlug, ctx.self);
         if (wider.poolSize > 0 && wider.results.length > 0) {
-          ({ results, poolSize, tooFew } = wider);
+          ({ results, poolSize, tooFew, noHardMatch } = wider);
           dropped = Object.keys(drop);
           break;
         }
@@ -493,10 +493,22 @@ const impls = {
     const weakNote = weakOnly
       ? 'This is NOT a strong match - it is the closest person available and everyone else scored too low to show. Say so honestly in your lead-in ("no strong fit for that exact ask, but the closest is...") instead of overselling it. '
       : '';
+    // Never show ZERO candidates just because nobody meets a stated hard
+    // requirement (skill/sector) exactly - findCofounders already fell back to
+    // the full pool instead of returning empty (see matching.js noHardMatch).
+    // The disclaimer is the honest part: say plainly that nobody matched the
+    // exact ask, these are the closest available, same doctrine as weakNote.
+    const reqParts = [];
+    if (filters.skills?.length) reqParts.push(filters.skills.join('/'));
+    if (filters.sector) reqParts.push(filters.sector);
+    const noHardMatchNote = noHardMatch
+      ? `Nobody in the directory exactly matches the requested ${reqParts.join(' + ') || 'requirement'} - these are the closest people available, not exact fits. Say so plainly in your lead-in instead of implying they meet the requirement. `
+      : '';
     return {
       status: 'ok',
       widened: dropped.length ? dropped : undefined,
       weakOnly: weakOnly || undefined,
+      noHardMatch: noHardMatch || undefined,
       shown: top.length,
       total: fresh.length,
       tooFew: fresh.length < 3,
@@ -506,6 +518,7 @@ const impls = {
       // as matching the dropped criterion in its own lead-in line.
       note:
         weakNote +
+        noHardMatchNote +
         (dropped.length
           ? `The disclosure above ALREADY told them this widened past ${dropped.join('/')} - do not also claim the results match ${dropped.join(' or ')} in your reply. ${MATCH_SHOWN_NOTE}`
           : MATCH_SHOWN_NOTE),
