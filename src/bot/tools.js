@@ -43,6 +43,22 @@ const definitions = [
           cohort: { type: 'integer' },
           skills: { type: 'array', items: { type: 'string' } },
           looking_for: { type: 'array', items: { type: 'string', enum: LOOKING_FOR } },
+          themes: {
+            type: 'array',
+            minItems: 2,
+            items: {
+              type: 'object',
+              properties: {
+                label: { type: 'string', description: 'what the user called this area, e.g. "real estate development"' },
+                sector: { type: 'string', enum: SECTORS },
+                query: { type: 'string', description: 'free-text keyword fallback when no sector fits, e.g. "invest"' },
+              },
+              required: ['label'],
+              additionalProperties: false,
+            },
+            description:
+              'Use when the user names MULTIPLE distinct areas for "my space" in ONE ask (e.g. "education and real estate", "fintech and healthcare") - pass every area here in a SINGLE call instead of calling search_founders once per area. Do NOT also set sector/city/query on this same call when using themes.',
+          },
         },
         additionalProperties: false,
       },
@@ -237,9 +253,76 @@ function widenedSearchDisclosure(dropped, filters) {
     : "here's from the wider community instead:";
 }
 
+/**
+ * Real observed failure (919910811300, "startup education and investing, and
+ * real estate development"): each named area fired its own search_founders
+ * call, producing two silo list bubbles for what the user asked as ONE space.
+ * This unions all named themes, then decides honestly: if a founder's profile
+ * genuinely spans 2+ named themes, show ONE ranked list (cross-cutting people
+ * first); if the themes are genuinely disjoint in this community, show them
+ * as separate lists with a plain disclaimer that nothing spans both.
+ */
+async function searchFoundersMultiTheme(rawThemes, ctx) {
+  const themes = rawThemes.map((t) => ({ label: t.label, sector: t.sector, query: t.query }));
+  const result = await founders.searchFoundersByThemes(themes, 10);
+
+  if (result.overlap) {
+    if (!result.results.length) {
+      return { status: 'none', note: 'Nothing matched across these themes even combined. Say so plainly and offer to broaden.' };
+    }
+    ctx.outbox.push({
+      kind: 'list',
+      body: `found ${result.count}${result.count > result.results.length ? ` · showing the top ${result.results.length}` : ''} · tap one to view:`,
+      button: 'View founders',
+      rows: result.results.map(fmt.toRow),
+    });
+    const shownSlugs = result.results.map((f) => f.source_slug);
+    ctx.state.last_results = Array.isArray(ctx.state.last_results)
+      ? [...ctx.state.last_results, ...shownSlugs]
+      : shownSlugs;
+    ctx.state.topic_changed = true;
+    return {
+      status: 'ok',
+      count: result.count,
+      shown: result.results.length,
+      note:
+        'These named areas overlap in real profiles, so ONE list was shown spanning all of them, led by whoever\'s profile genuinely spans the most areas. Do not describe it as several separate searches. ' +
+        LIST_SHOWN_NOTE,
+    };
+  }
+
+  const nonEmpty = result.groups.filter((g) => g.results.length);
+  if (!nonEmpty.length) {
+    return { status: 'none', note: 'Nothing matched any of these named areas. Say so plainly and offer to broaden.' };
+  }
+  let allShown = [];
+  for (const g of nonEmpty) {
+    ctx.outbox.push({
+      kind: 'list',
+      body: `${g.theme.label}: found ${g.results.length} · tap one to view:`,
+      button: 'View founders',
+      rows: g.results.map(fmt.toRow),
+    });
+    allShown = allShown.concat(g.results.map((f) => f.source_slug));
+  }
+  ctx.state.last_results = Array.isArray(ctx.state.last_results)
+    ? [...ctx.state.last_results, ...allShown]
+    : allShown;
+  ctx.state.topic_changed = true;
+  return {
+    status: 'ok',
+    note:
+      `No founder in the community spans BOTH ${nonEmpty.map((g) => g.theme.label).join(' and ')} at once - these are genuinely separate areas here. Say that plainly in one honest sentence, then let the ${nonEmpty.length} lists above speak for themselves. ` +
+      LIST_SHOWN_NOTE,
+  };
+}
+
 /** Tool implementations. Each receives (args, ctx) and returns a summary object for the model. */
 const impls = {
   async search_founders(args, ctx) {
+    if (Array.isArray(args.themes) && args.themes.length >= 2) {
+      return searchFoundersMultiTheme(args.themes, ctx);
+    }
     let filters = toFilters(args);
     let count = await founders.countFounders(filters);
     let broadened = null;

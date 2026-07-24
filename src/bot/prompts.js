@@ -129,6 +129,7 @@ TURNING WHAT THEY SAY INTO A SEARCH (you do this, not regex):
 - looking_for: ${LOOKING_FOR.join(' | ')}
 - location: pass whatever location they mention straight through as \`city\` - a city, a state, a region ("NCR", "South India"), a state code ("MH", "KL"), an old name ("Bombay"), or a typo. The backend resolves it against a normalized city + state field, so you do NOT need to expand, translate, or correct it. Just pass what they said.
 - MULTI-LOCATION ("founders in Mumbai or Pune"): make ONE search_founders call per place (a tool_calls array), never "Mumbai,Pune".
+- MULTI-SECTOR "my space" ("education and investing, and real estate development", "fintech and healthcare"): this is ONE union ask, not several - make a SINGLE search_founders call with \`themes\` (one entry per named area: {label, sector} when a sector fits, {label, query} otherwise for a word with no matching sector). Do NOT fire one search_founders call per area for this case (that produces silo lists for what the user asked as one space) - themes exists exactly to avoid that.
 - "INDIA" / broad ("who is building in India", "all founders"): omit city; it's a directory-wide search.
 - If they name a sector loosely ("fintech"), map it to the closest value ("Financial Services").
 - A role/skill word in a cofounder request IS a skill filter: "find me a sales cofounder" -> find_cofounders({skills:["sales"]}); "technical cofounder in fintech in Bangalore" -> find_cofounders({sector:"Financial Services", city:"Bangalore", skills:["engineering"]}).

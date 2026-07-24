@@ -258,6 +258,94 @@ function rankByQuery(rows, query) {
     .map((x) => x.f);
 }
 
+/**
+ * Does founder `f` match theme `t`? A theme is either a sector (exact match)
+ * or a free-text keyword checked against the same fields `rankByQuery` already
+ * trusts (startup name/idea/skills) - we don't select `search_blob` for this
+ * path, so this is an approximation of the DB-side blob match, not identical.
+ */
+function founderMatchesTheme(f, t) {
+  if (t.sector && String(f.sector || '').toLowerCase() === String(t.sector).toLowerCase()) return true;
+  const q = String(t.query || '').toLowerCase().trim();
+  if (q) {
+    const hay = [f.startup_name, f.startup_idea, ...(Array.isArray(f.skills) ? f.skills : [])]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    if (hay.includes(q)) return true;
+  }
+  return false;
+}
+
+/**
+ * Real observed failure (919910811300, "startup education and investing, and
+ * real estate development"): each named area got its own search_founders call
+ * and its own list bubble - two silos for what the user asked as ONE space.
+ * This scores the UNIONED pool against every named theme and decides between
+ * two honest presentations:
+ *  - overlap exists (>=1 founder's profile genuinely spans 2+ named themes,
+ *    e.g. a "real estate INVESTMENT platform" hits both real estate and
+ *    investing) -> ONE ranked list, the cross-cutting founder(s) first, then
+ *    the single-theme remainder round-robined across themes so a named theme
+ *    never gets buried by a bigger one.
+ *  - no overlap -> the themes are genuinely disjoint in this community; the
+ *    caller should show them as separate lists with an honest disclaimer,
+ *    never silently merge unrelated people into one ranked list.
+ */
+function scoreThemeUnion(pool, themes, limit = 10) {
+  const scored = pool.map((f) => ({ f, hits: themes.map((t) => founderMatchesTheme(f, t)) }));
+  const hitCount = (s) => s.hits.filter(Boolean).length;
+  const overlap = scored.some((s) => hitCount(s) >= 2);
+
+  if (!overlap) {
+    const groups = themes.map((t, i) => ({
+      theme: t,
+      results: scored.filter((s) => s.hits[i]).map((s) => s.f).slice(0, limit),
+    }));
+    return { overlap: false, groups };
+  }
+
+  const crossCutting = scored
+    .filter((s) => hitCount(s) >= 2)
+    .sort((a, b) => hitCount(b) - hitCount(a));
+  const singleHitByTheme = themes.map((_, i) => scored.filter((s) => hitCount(s) === 1 && s.hits[i]).map((s) => s.f));
+
+  const results = crossCutting.map((s) => s.f);
+  let added = true;
+  while (results.length < limit && added) {
+    added = false;
+    for (const group of singleHitByTheme) {
+      if (results.length >= limit) break;
+      const next = group.shift();
+      if (next) {
+        results.push(next);
+        added = true;
+      }
+    }
+  }
+  return { overlap: true, count: pool.length, results: results.slice(0, limit) };
+}
+
+async function searchFoundersByThemes(themes, limit = 10) {
+  const clauses = [];
+  for (const t of themes) {
+    if (t.sector) clauses.push(`sector.eq.${t.sector}`);
+    const q = String(t.query || '').toLowerCase().trim();
+    if (q && !/[,()]/.test(q)) clauses.push(blobOrClause('search_blob', q));
+  }
+  if (!clauses.length) return { overlap: false, groups: themes.map((t) => ({ theme: t, results: [] })) };
+
+  const { data, error } = await supabase()
+    .from('founders')
+    .select(LIST_COLUMNS)
+    .eq('is_published', true)
+    .or(clauses.join(','))
+    .limit(Math.max(limit * 8, 80));
+  if (error) throw new Error(`searchFoundersByThemes: ${error.message}`);
+
+  return scoreThemeUnion(dedupeFounders(data || []), themes, limit);
+}
+
 async function countFounders(filters = {}) {
   // Count DISTINCT, SHOWABLE people - not raw rows - so the number always equals
   // what the list actually renders. Needs the content columns isShowable checks.
@@ -415,6 +503,8 @@ async function cofounderCandidates(filters = {}, excludeSlug = null, limit = 40)
 module.exports = {
   findByWaId,
   searchFounders,
+  searchFoundersByThemes,
+  scoreThemeUnion,
   countFounders,
   getBySlug,
   findByName,
