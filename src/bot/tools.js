@@ -310,7 +310,21 @@ const impls = {
       button: 'View founders',
       rows: results.map(fmt.toRow),
     });
-    ctx.state.last_results = results.map((f) => f.source_slug);
+    // Multiple search_founders calls can fire in ONE turn (multi-sector /
+    // multi-location, per the prompt's one-call-per-place rule) - each pushes
+    // its own list bubble. APPEND rather than overwrite so a typed ordinal
+    // ("the 3rd one") resolves against the COMBINED, top-to-bottom set the user
+    // actually sees. Real observed failure (919910811300, "education +
+    // investing + real estate development"): two lists were sent but
+    // last_results held only the SECOND list's slugs, so a typed "3" would have
+    // opened the 3rd built-environment founder, not the 3rd education one the
+    // user meant. Taps (replyId) were unaffected - the id carries the slug -
+    // which is why it only bites the typed-number path. ctx.state is fresh per
+    // turn, so this only ever unions lists shown within the same turn.
+    const shownSlugs = results.map((f) => f.source_slug);
+    ctx.state.last_results = Array.isArray(ctx.state.last_results)
+      ? [...ctx.state.last_results, ...shownSlugs]
+      : shownSlugs;
     ctx.state.topic_changed = true;
     return {
       status: 'ok',
